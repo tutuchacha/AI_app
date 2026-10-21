@@ -58,6 +58,6 @@
 
 ## 5. 环境速查
 
-JDK 21、Maven 3.9、Node 24、MySQL 8（`net start mysql`）、SSH remote
+JDK 21（本机 `D:\JDK21`）、Maven 3.6.3、Node 24、MySQL 8（`net start mysql`）、SSH remote
 `git@github.com:tutuchacha/AI_app.git`。端口：前端 5173、后端 8080、MySQL 3306、
 Prometheus 9090、Grafana 3000、Ollama 11434。详见 `docs/01-环境准备.md`。

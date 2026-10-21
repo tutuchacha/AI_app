@@ -5,26 +5,26 @@
 - 更新时间：2026-10-21
 - 当前阶段：**M0 骨架（未开始）**
 - 当前分支：`main`
-- 最近提交：`9382684 docs: 初始化 AI App 架构方案`
-- 远程：`git@github.com:tutuchacha/AI_app.git`（SSH 已通，仓库为空，待 push）
+- 最近提交：`06f995c docs: 明确 SSE+WS 双通道与上下文文档规则`
+- 远程：`git@github.com:tutuchacha/AI_app.git`（SSH 已通，已推送）
 
 ## 现在做到哪
 
 - [x] 总体架构方案 `docs/00-架构方案.md`
 - [x] 环境准备文档 `docs/01-环境准备.md`
 - [x] Git 初始化 + SSH remote + 文档规则（AGENTS.md / INDEX / STATUS / progress）
+- [x] JDK 21 安装（D:\JDK21，用户级 JAVA_HOME 已生效）
 - [ ] M0 后端骨架
 - [ ] M0 前端骨架
 
 ## 下一步（只做这 3 件）
 
-1. 安装 JDK 21，切换 `JAVA_HOME`，确认 `mvn -v` 为 21（人工）
-2. `net start mysql`，建库 `ai_app` 与账号（人工）
-3. 生成 M0 骨架：Spring Boot 3.5 + Vue 3，含登录、Flyway、Swagger、Actuator
+1. `net start mysql`，建库 `ai_app` 与账号（人工）
+2. 生成 M0 骨架：Spring Boot 3.5 + Vue 3，含登录、Flyway、Swagger、Actuator
+3. 启动验证，补 `docs/02-接口约定.md`
 
 ## 阻塞项
 
-- JDK 8 无法启动 Spring Boot 3.x，需先装 **JDK 21**
 - MySQL 服务当前 Stopped（服务名 `mysql`）
 - 尚无模型 API Key / Ollama（M1 前准备即可）
 
@@ -44,5 +44,7 @@ cd frontend; npm install; npm run dev
 
 ## 最近进度（倒序，最多 5 条）
 
-- 2026-10-21 M0-01：Git/SSH/文档规则就绪
+- 2026-10-21 M0-03：JDK 21 安装完成（D:\JDK21，Maven 已验证）
+- 2026-10-21 M0-02：SSE/WS 双通道与文档规则落地
+- 2026-10-21 M0-01：Git/SSH/文档体系就绪
 - 2026-10-21 M0-00：架构方案与环境文档完成
