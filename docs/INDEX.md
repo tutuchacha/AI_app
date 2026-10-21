@@ -9,6 +9,7 @@
 | `01-环境准备.md` | JDK/MySQL/Git/Ollama/Nginx 安装 | 换机器 / 环境报错 | 220 |
 | `04-对标-yu-ai-agent.md` | 目标能力地图、差距、调整路线图 | 规划阶段 / 加 Agent | 200 |
 | `modules/frontend.md` | M0 界面、目录职责、F0-01~F0-10 实现步骤 | 做前端 / 接后端 | 200 |
+| `modules/backend.md` | M0 后端骨架、B01~B06 步骤、建库命令 | 做后端 / 联调 | 200 |
 | `adr/0001-ai-framework.md` | 为什么选 Spring AI | 质疑选型时 | 60 |
 | `adr/0002-streaming-transport.md` | SSE + WebSocket 双通道 | 做 M1 流式时 | 60 |
 | `modules/chat.md` | 聊天模块：接口、事件、状态 | 做 M1 时 | 200 |
