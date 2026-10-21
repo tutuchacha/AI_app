@@ -33,6 +33,7 @@
 - 主框架 Spring AI 1.1.8 + Boot 3.5.16（ADR-0001）
 - 流式双通道：SSE 为主，WebSocket 为对照模块（ADR-0002）
 - 向量库一期 SimpleVectorStore，二期自研 MySQL（架构方案 §5.5）
+- 目标基线：对标 yu-ai-agent，新增 Tool/MCP 与 ReAct 阶段（`docs/04-对标-yu-ai-agent.md`）
 
 ## 快速启动
 
@@ -44,6 +45,7 @@ cd frontend; npm install; npm run dev
 
 ## 最近进度（倒序，最多 5 条）
 
+- 2026-10-21 M0-04：完成 yu-ai-agent 对标分析，路线图新增 Tool/MCP、ReAct
 - 2026-10-21 M0-03：JDK 21 安装完成（D:\JDK21，Maven 已验证）
 - 2026-10-21 M0-02：SSE/WS 双通道与文档规则落地
 - 2026-10-21 M0-01：Git/SSH/文档体系就绪

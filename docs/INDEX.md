@@ -7,6 +7,7 @@
 | `STATUS.md` | 当前进度、下一步、阻塞 | **每次开工必读** | 60 |
 | `00-架构方案.md` | 总体架构、技术选型、表结构、路线图 | 第一次接手 / 改架构 | 450 |
 | `01-环境准备.md` | JDK/MySQL/Git/Ollama/Nginx 安装 | 换机器 / 环境报错 | 220 |
+| `04-对标-yu-ai-agent.md` | 目标能力地图、差距、调整路线图 | 规划阶段 / 加 Agent | 200 |
 | `adr/0001-ai-framework.md` | 为什么选 Spring AI | 质疑选型时 | 60 |
 | `adr/0002-streaming-transport.md` | SSE + WebSocket 双通道 | 做 M1 流式时 | 60 |
 | `modules/chat.md` | 聊天模块：接口、事件、状态 | 做 M1 时 | 200 |
