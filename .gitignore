@@ -1,0 +1,69 @@
+# ---- Java / Maven ----
+target/
+build/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+*.log
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+!.vscode/extensions.json
+.settings/
+.classpath
+.project
+.factorypath
+
+# ---- Node / Vue ----
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+coverage/
+
+# ---- 配置与密钥 ----
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+application-*.yml.bak
+*.pem
+*.p12
+*.jks
+
+# ---- 运行时数据 ----
+uploads/
+data/
+logs/
+*.pid
+*.hprof
+*.sql.gz
+
+# ---- 基础设施 ----
+infra/nginx/logs/
+infra/nginx/temp/
+infra/prometheus/data/
+infra/grafana/data/
+infra/grafana/logs/
+infra/bin/
+nginx.exe
+prometheus.exe
+grafana-server.exe
+
+# ---- OS ----
+Thumbs.db
+Desktop.ini
+.DS_Store
