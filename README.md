@@ -27,10 +27,21 @@ infra/      Nginx / Prometheus / Grafana 配置与脚本
 docs/       架构、环境、接口文档
 ```
 
+## 从任意地方接手
+
+1. 读 `docs/STATUS.md`（当前进度 / 下一步 / 阻塞）
+2. 查 `docs/INDEX.md`（只挑相关文档）
+3. 按 `AGENTS.md` 的规则推进，每步更新 STATUS 与 progress
+
+远程：`git@github.com:tutuchacha/AI_app.git`（SSH）
+
 ## 文档
 
+- [项目状态](docs/STATUS.md)
+- [文档索引](docs/INDEX.md)
 - [架构方案](docs/00-架构方案.md)
 - [环境准备](docs/01-环境准备.md)
+- [AI 协作规则](AGENTS.md)
 
 ## 快速开始
 
