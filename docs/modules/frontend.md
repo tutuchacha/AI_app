@@ -3,6 +3,14 @@
 > 目标：先把产品样子跑起来，理解每个页面的职责；后端接入时只替换数据层。
 > 启动：`cd frontend && npm install && npm run dev` → http://127.0.0.1:5173
 
+## 0. 速览（接前端只读这节）
+
+- 启动：`cd frontend; npm install; npm run dev` → http://127.0.0.1:5173
+- 结构：`chat/`（传输与状态）、`components/chat/`（UI）、`views/`（页面）
+- 关键：`ChatTransport` 契约、`useChat` 状态机、`ChatPanel` 三模式复用
+- 已完成：F0-01~F0-10；下一步接真实登录 `/api/auth/login`
+- 改哪个页面，再跳到对应 F0 步骤，不从头读
+
 ## 1. 目录职责
 
 ```

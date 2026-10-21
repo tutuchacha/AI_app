@@ -3,6 +3,15 @@
 > 只描述聊天与流式传输。RAG 见 `rag.md`（M2），角色卡见 `companion.md`（M4）。
 > 决策背景见 `../adr/0002-streaming-transport.md`。
 
+## 0. 速览（做 M1 只读这节）
+
+- 目标：多轮会话、流式、停止、落库；SSE 为主，WS 为对照
+- 唯一入口：`ChatOrchestrator`；输出统一 `ChatEvent` 流
+- 接口：`POST /api/chat/stream`；事件 `meta/delta/citation/usage/done/error`
+- 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
+- 验收：前端停止能中断后端；SSE 与 WS 输出一致
+- 下一步：先做 SSE，再补 WebSocket
+
 ## 1. 目标
 
 - 多轮会话、流式输出、停止生成、重新生成。

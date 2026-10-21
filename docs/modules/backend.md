@@ -4,6 +4,14 @@
 > 版本：JDK 21、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Flyway、MySQL 8。
 > Spring AI 1.1.8 在 M1 引入，M0 不建模型调用。
 
+## 0. 速览（只读这节）
+
+- 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
+- 当前：B01 未开始；步骤在 §2，每步一个 commit
+- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`SecurityConfig`
+- 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
+- 下一步：建库后做 M0-B01
+
 ## 1. 包结构
 
 ```
