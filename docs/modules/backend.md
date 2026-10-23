@@ -7,10 +7,10 @@
 ## 0. 速览（只读这节）
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
-- 当前：B01 未开始；步骤在 §2，每步一个 commit
+- 当前：B01–B02 完成（骨架 + 建库 + Flyway `V1`），下一步 B03
 - 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`SecurityConfig`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
-- 下一步：建库后做 M0-B01
+- 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
 
 ## 1. 包结构
 
@@ -61,14 +61,16 @@ backend/src/main/java/com/tutuchacha/ai/
 - 保留：`VITE_USE_MOCK=true` 时仍走 Mock，方便离线开发
 - 验收：前端登录写真实 token，刷新保持；未登录访问 `/chat` 仍被守卫拦截
 
-## 3. 建库命令
+## 3. 建库命令（已执行，留作换机参考）
 
 ```sql
 CREATE DATABASE ai_app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-CREATE USER 'ai_app'@'localhost' IDENTIFIED BY 'change_me';
+CREATE USER 'ai_app'@'localhost' IDENTIFIED BY '<见 application-local.yml>';
 GRANT ALL PRIVILEGES ON ai_app.* TO 'ai_app'@'localhost';
 FLUSH PRIVILEGES;
 ```
+
+表结构与排障见 `docs/modules/database.md`。
 
 ## 4. 本地启动
 

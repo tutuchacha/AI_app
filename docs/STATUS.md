@@ -3,23 +3,23 @@
 > 仪表盘：只写当前，≤35 行 / 1.8k 字符。历史去 progress，决策去 ADR。
 
 - 更新时间：2026-10-23
-- 阶段：**M0 后端进行中（B01–B02 完成）**
-- 代码提交：`7c09e8b`（B01）；B02 本次
+- 阶段：**M0 后端 B01–B02 完成，文档就绪**
+- 代码提交：`48971f7`（B02；B01 为 `7c09e8b`）
 - 数据库：本机 `127.0.0.1:3306 / ai_app`，Flyway `V1` 已执行
+- 文档：新增 `docs/ARCHITECTURE.md`、`docs/modules/database.md`
 - 远程：`git@github.com:tutuchacha/AI_app.git`（已同步）
 
 ## 下一步（按顺序）
 
 1. `M0-B03` 统一响应 `Result` / 错误码 / 全局异常 / TraceId
-2. 之后 `B04` JWT 登录 → `B05` Swagger/Actuator → `B06` 前端联调
-3. 文档：`docs/modules/database.md`、`docs/ARCHITECTURE.md`（本次一并产出）
+2. `B04` JWT 登录 → `B05` Swagger/Actuator → `B06` 前端联调
 
 ## 已完成
 
 - 前端 8 页 + Mock 流式 + 学习提示（`b75358b`）
 - B01：后端骨架、临时 Security/CORS、Maven Wrapper；health=UP
-- B02：建库建号（`ai_app`）、`V1__init.sql`（`sys_user`）、Flyway 开启
-- 验证：`flyway_schema_history` 有 V1 记录；`/actuator/health` = UP
+- B02：建库建号、`V1__init.sql`（`sys_user`）、Flyway 与 health.db 开启
+- 架构图（页面→文件、包结构、登录/聊天链路）与数据库手册
 
 ## 阻塞
 
