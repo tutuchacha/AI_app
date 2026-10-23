@@ -20,8 +20,7 @@ spring:
       minimum-idle: 2
       connection-timeout: 3000
   flyway:
-    # B01 先关闭，M0-B02 建库并放入 V1__init.sql 后改为 true
-    enabled: false
+    enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
     encoding: UTF-8
@@ -42,9 +41,8 @@ springdoc:
 
 management:
   health:
-    # B01 尚未建库/建账号，避免健康检查 503；M0-B02 建库后改为 true
     db:
-      enabled: false
+      enabled: true
   endpoints:
     web:
       exposure:
