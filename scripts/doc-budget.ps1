@@ -15,6 +15,7 @@ $limits = @(
   [pscustomobject]@{ File = 'docs/01-环境准备.md'; Lines = 220; Chars = 6500 }
   [pscustomobject]@{ File = 'docs/04-对标-yu-ai-agent.md'; Lines = 200; Chars = 5500 }
   [pscustomobject]@{ File = 'docs/ARCHITECTURE.md'; Lines = 150; Chars = 5000 }
+  [pscustomobject]@{ File = 'docs/DOC-GOVERNANCE.md'; Lines = 100; Chars = 4000 }
 )
 
 foreach ($file in Get-ChildItem 'docs/modules/*.md') {
@@ -62,3 +63,4 @@ if ($bad.Count -gt 0) {
 }
 
 Write-Host '全部文档在预算内。' -ForegroundColor Green
+exit 0

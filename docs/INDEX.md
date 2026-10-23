@@ -12,6 +12,7 @@
 | `modules/backend.md` | M0 后端骨架、B01~B06 步骤、建库命令 | 做后端 / 联调 | 120 |
 | `modules/database.md` | 库/账号/表结构/迁移规范/排查 | 改表 / 查数据 / 连库失败 | 120 |
 | `ARCHITECTURE.md` | 架构图、页面→文件地图、包结构与关键链路 | 找代码 / 新人接手 | 150 |
+| `DOC-GOVERNANCE.md` | 文档分层、SSOT、同步清单、收尾流程 | 改文档规则 / 交接 | 100 |
 | `adr/0001-ai-framework.md` | 为什么选 Spring AI | 质疑选型时 | 60 |
 | `adr/0002-streaming-transport.md` | SSE + WebSocket 双通道 | 做 M1 流式时 | 60 |
 | `modules/chat.md` | 聊天模块：接口、事件、状态 | 做 M1 时 | 120 |
@@ -33,3 +34,5 @@
 - 新增文档必须在本表加一行，否则视为临时草稿。
 - 文档之间用相对链接，不复制内容。
 - 超过上限就拆分；拆分后在原文档顶部留“已拆分至 …”。
+- 单一事实来源、改代码同步清单、每步收尾流程见 [`DOC-GOVERNANCE.md`](DOC-GOVERNANCE.md)。
+- 提交前跑 `pwsh scripts/doc-check.ps1`（预算 + 死链 + INDEX 覆盖）。

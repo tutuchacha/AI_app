@@ -54,7 +54,8 @@
 | `docs/adr/*.md` | 60 行 / 4k | 新 ADR 取代 |
 | `docs/progress/*.md` | 单条 8 行 / 600 字符 | 按月分文件 |
 
-- 检查：`pwsh scripts/doc-budget.ps1`（超限返回非 0，提交前跑一次）。
+- 检查：`pwsh scripts/doc-check.ps1`（预算 + 死链 + INDEX 覆盖，提交前跑一次）。
+- 文档分层、单一事实来源、改代码同步清单见 `docs/DOC-GOVERNANCE.md`。
 - 原则：STATUS 仪表盘、progress 流水账、ADR 决策、modules 手册，不重复。
 
 ## 4. 代码约定

@@ -145,4 +145,5 @@ sequenceDiagram
 - 环境与启动：`docs/01-环境准备.md`、`docs/modules/backend.md` §4
 - 前端细节：`docs/modules/frontend.md`
 - 数据库与表结构：`docs/modules/database.md`
+- 文档怎么维护/改哪里同步哪里：[`DOC-GOVERNANCE.md`](DOC-GOVERNANCE.md)
 - 当前进度与下一步：`docs/STATUS.md`
