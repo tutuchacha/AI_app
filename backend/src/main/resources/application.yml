@@ -1,0 +1,59 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: ai-app
+  profiles:
+    active: local
+  jackson:
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/ai_app?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:ai_app}
+    password: ${DB_PASSWORD:change_me}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 3000
+  flyway:
+    # B01 先关闭，M0-B02 建库并放入 V1__init.sql 后改为 true
+    enabled: false
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    encoding: UTF-8
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  health:
+    # B01 尚未建库/建账号，避免健康检查 503；M0-B02 建库后改为 true
+    db:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    root: info
+    com.tutuchacha.ai: debug
