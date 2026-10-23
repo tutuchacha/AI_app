@@ -11,7 +11,7 @@
 | `modules/frontend.md` | M0 界面、目录职责、F0-01~F0-10 实现步骤 | 做前端 / 接后端 | 120 |
 | `modules/backend.md` | M0 后端骨架、B01~B06 步骤、建库命令 | 做后端 / 联调 | 120 |
 | `modules/database.md` | 库/账号/表结构/迁移规范/排查 | 改表 / 查数据 / 连库失败 | 120 |
-| `ARCHITECTURE.md` | 架构图、页面→文件地图、包结构与关键链路 | 找代码 / 新人接手 | 140 |
+| `ARCHITECTURE.md` | 架构图、页面→文件地图、包结构与关键链路 | 找代码 / 新人接手 | 150 |
 | `adr/0001-ai-framework.md` | 为什么选 Spring AI | 质疑选型时 | 60 |
 | `adr/0002-streaming-transport.md` | SSE + WebSocket 双通道 | 做 M1 流式时 | 60 |
 | `modules/chat.md` | 聊天模块：接口、事件、状态 | 做 M1 时 | 120 |

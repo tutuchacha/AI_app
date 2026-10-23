@@ -55,18 +55,19 @@ M1 起逐步加入：`conversation`（会话）、`message`（消息）、`knowl
 ## 4. 常用命令
 
 ```powershell
-# 连接（密码见 application-local.yml）
-mysql --host=127.0.0.1 --port=3306 --user=ai_app --password ai_app
+# 连接（回车后输入密码，见 application-local.yml）
+mysql --host=127.0.0.1 --port=3306 --user=ai_app -p ai_app
 
 # 看表与迁移记录
-mysql ... ai_app -e "show tables; select version, description, success from flyway_schema_history;"
+mysql --host=127.0.0.1 --port=3306 --user=ai_app -p ai_app `
+  -e "show tables; select version, description, success from flyway_schema_history;"
 
 # 看表结构
-mysql ... ai_app -e "desc sys_user; show index from sys_user;"
+mysql --host=127.0.0.1 --port=3306 --user=ai_app -p ai_app -e "desc sys_user; show index from sys_user;"
 
 # 备份 / 恢复
-mysqldump --host=127.0.0.1 --port=3306 --user=ai_app --password ai_app ai_app > backup.sql
-mysql --host=127.0.0.1 --port=3306 --user=ai_app --password ai_app ai_app < backup.sql
+mysqldump --host=127.0.0.1 --port=3306 --user=ai_app -p ai_app > backup.sql
+mysql --host=127.0.0.1 --port=3306 --user=ai_app -p ai_app < backup.sql
 ```
 
 ## 5. 故障排查
