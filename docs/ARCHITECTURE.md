@@ -15,7 +15,7 @@ flowchart LR
 ```
 
 - 前端只认 `/api`，代理配置在 `frontend/vite.config.ts`
-- 后端统一响应 `{ code, message, data, traceId }`（B03 实现）
+- 后端统一响应 `{ code, message, data, traceId }`，契约见 `docs/02-接口约定.md`
 - 数据库只由 Flyway 改，见 `docs/modules/database.md`
 
 ## 2. 前端页面地图（谁在哪个文件）
@@ -98,7 +98,7 @@ flowchart LR
 | --- | --- | --- |
 | `com.tutuchacha.ai` | 启动类 | `AiApplication.java` |
 | `config` | 安全、跨域、OpenAPI | `SecurityConfig`、`CorsConfig` → B05 加 `OpenApiConfig` |
-| `common` | 统一返回、错误码、异常、TraceId | B03 新增 `Result`、`ErrorCode`、`GlobalExceptionHandler`、`TraceIdFilter` |
+| `common` | 统一返回、错误码、异常、TraceId | ✅ `Result`、`ErrorCode`、`BusinessException`、`GlobalExceptionHandler`、`TraceIdFilter` |
 | `auth` | 注册、登录、JWT 过滤器 | B04 新增 `AuthController`、`AuthService`、`JwtService`、`JwtAuthFilter` |
 | `user` | 用户实体与 Mapper | B04 新增 `User`、`UserMapper` |
 | `meta` | 健康、版本、模型配置 | M1 起 |
@@ -145,5 +145,6 @@ sequenceDiagram
 - 环境与启动：`docs/01-环境准备.md`、`docs/modules/backend.md` §4
 - 前端细节：`docs/modules/frontend.md`
 - 数据库与表结构：`docs/modules/database.md`
+- 接口契约：`docs/02-接口约定.md`
 - 文档怎么维护/改哪里同步哪里：[`DOC-GOVERNANCE.md`](DOC-GOVERNANCE.md)
 - 当前进度与下一步：`docs/STATUS.md`

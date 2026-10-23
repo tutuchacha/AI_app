@@ -1,0 +1,8 @@
+spring:
+  flyway:
+    enabled: false
+
+management:
+  health:
+    db:
+      enabled: false

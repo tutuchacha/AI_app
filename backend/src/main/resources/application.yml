@@ -52,6 +52,8 @@ management:
       show-details: when-authorized
 
 logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
   level:
     root: info
     com.tutuchacha.ai: debug

@@ -16,6 +16,7 @@ $limits = @(
   [pscustomobject]@{ File = 'docs/04-对标-yu-ai-agent.md'; Lines = 200; Chars = 5500 }
   [pscustomobject]@{ File = 'docs/ARCHITECTURE.md'; Lines = 150; Chars = 5000 }
   [pscustomobject]@{ File = 'docs/DOC-GOVERNANCE.md'; Lines = 100; Chars = 4000 }
+  [pscustomobject]@{ File = 'docs/02-接口约定.md'; Lines = 120; Chars = 4500 }
 )
 
 foreach ($file in Get-ChildItem 'docs/modules/*.md') {

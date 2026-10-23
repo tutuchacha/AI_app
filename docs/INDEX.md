@@ -11,6 +11,7 @@
 | `modules/frontend.md` | M0 界面、目录职责、F0-01~F0-10 实现步骤 | 做前端 / 接后端 | 120 |
 | `modules/backend.md` | M0 后端骨架、B01~B06 步骤、建库命令 | 做后端 / 联调 | 120 |
 | `modules/database.md` | 库/账号/表结构/迁移规范/排查 | 改表 / 查数据 / 连库失败 | 120 |
+| `02-接口约定.md` | 统一响应、错误码、TraceId、鉴权头、接口表 | 写接口 / 接前端 | 120 |
 | `ARCHITECTURE.md` | 架构图、页面→文件地图、包结构与关键链路 | 找代码 / 新人接手 | 150 |
 | `DOC-GOVERNANCE.md` | 文档分层、SSOT、同步清单、收尾流程 | 改文档规则 / 交接 | 100 |
 | `adr/0001-ai-framework.md` | 为什么选 Spring AI | 质疑选型时 | 60 |
@@ -26,7 +27,6 @@
 | `modules/analysis.md` | M3 开始 |
 | `modules/companion.md` | M4 开始 |
 | `modules/support.md` | M4 开始 |
-| `02-接口约定.md` | M0 接口定稿后 |
 | `03-本地启动.md` | M0 骨架跑通后 |
 
 ## 维护规则
