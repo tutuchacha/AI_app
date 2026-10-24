@@ -16,6 +16,7 @@
 | `DOC-GOVERNANCE.md` | 文档分层、SSOT、同步清单、收尾流程 | 改文档规则 / 交接 | 100 |
 | `adr/0001-ai-framework.md` | 为什么选 Spring AI | 质疑选型时 | 60 |
 | `adr/0002-streaming-transport.md` | SSE + WebSocket 双通道 | 做 M1 流式时 | 60 |
+| `adr/0003-dashscope-provider.md` | 模型服务选百炼、模型分工、密钥管理 | 接模型 / 换厂商 | 60 |
 | `modules/chat.md` | 聊天模块：接口、事件、状态 | 做 M1 时 | 120 |
 | `progress/YYYY-MM.md` | 流水账，只追加 | 只读当月最后 3 条 | 单条 8 |
 

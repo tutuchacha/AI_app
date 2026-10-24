@@ -24,6 +24,11 @@ foreach ($file in Get-ChildItem 'docs/modules/*.md') {
   $limits += [pscustomobject]@{ File = $relative; Lines = 120; Chars = 5000 }
 }
 
+foreach ($file in Get-ChildItem 'docs/adr/*.md') {
+  $relative = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
+  $limits += [pscustomobject]@{ File = $relative; Lines = 60; Chars = 4000 }
+}
+
 function Get-TokenEstimate([string]$text) {
   $cjk = ([regex]::Matches($text, '[\u4e00-\u9fff]')).Count
   $other = $text.Length - $cjk
