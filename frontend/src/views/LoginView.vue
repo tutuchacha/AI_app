@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, ChatDotRound, Document, Lock, Star, User } from '@element-plus/icons-vue'
+import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -10,7 +11,7 @@ const router = useRouter()
 const route = useRoute()
 
 const username = ref('demo')
-const password = ref('123456')
+const password = ref('demo1234')
 const loading = ref(false)
 
 const features = [
@@ -19,19 +20,27 @@ const features = [
   { icon: Document, title: '知识', text: 'RAG 与文档分析' },
 ]
 
-function submit() {
+function redirectTarget(): string {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/chat'
+  return redirect.startsWith('/') ? redirect : '/chat'
+}
+
+async function submit() {
   if (!username.value.trim() || !password.value) {
     ElMessage.warning('请输入账号和密码')
     return
   }
   loading.value = true
-  window.setTimeout(() => {
-    auth.login(username.value.trim())
+  try {
+    await auth.login(username.value.trim(), password.value)
+    ElMessage.success(auth.isMock ? '已进入 M0 界面预览（Mock）' : '登录成功')
+    await router.push(redirectTarget())
+  } catch (error) {
+    const message = error instanceof ApiError ? error.message : '登录失败，请稍后重试'
+    ElMessage.error(message)
+  } finally {
     loading.value = false
-    ElMessage.success('已进入 M0 界面预览')
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/chat'
-    router.push(redirect)
-  }, 350)
+  }
 }
 </script>
 
@@ -71,7 +80,7 @@ function submit() {
       <div class="form-card fade-up">
         <span class="pill">M0 阶段</span>
         <h2>欢迎回来</h2>
-        <p class="sub">当前是纯前端预览，任意账号即可登录，不会请求后端。</p>
+        <p class="sub">真实账号登录，token 由后端签发；开发时可开 Mock 离线预览。</p>
 
         <form @submit.prevent="submit">
           <label>
@@ -95,11 +104,11 @@ function submit() {
         </form>
 
         <div class="note">
-          <strong>下一步</strong>
-          M0 骨架完成后，这里会接 Spring Security + JWT，替换掉 Mock 登录。
+          <strong>登录方式</strong>
+          默认请求 `/api/auth/login`，JWT 有效期 2 小时；设置 `VITE_USE_MOCK=true` 可离线跳过后端。
         </div>
 
-        <p class="demo">演示账号：demo / 123456（不校验）</p>
+        <p class="demo">演示账号：demo / demo1234（本地库）</p>
       </div>
     </section>
   </div>

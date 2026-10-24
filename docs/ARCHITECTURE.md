@@ -61,8 +61,10 @@ flowchart TD
 | `src/components/LearningNote.vue` | 页面底部学习提示 | 加教学说明 |
 | `src/chat/useChat.ts` | 发送、流式增量、停止、重置 | 接真实 SSE 时改 transport |
 | `src/chat/mockTransport.ts` | 本地模拟流式输出 | M0 演示用，M1 保留开关 |
-| `src/stores/auth.ts` | token / 用户名 / 登录登出 | B06 改为调后端 |
+| `src/stores/auth.ts` | token / 用户名 / 登录登出 | ✅ 已调后端，Mock 可切 |
 | `src/stores/ui.ts` | 侧边栏折叠等 UI 状态 | 纯前端状态 |
+| `src/api/http.ts` | fetch 封装、token 注入、统一错误 | 改请求头 / 401 处理 |
+| `src/api/auth.ts` | 登录、注册、`/me` | 改接口路径 |
 | `src/data/personas.ts` | 陪伴角色预设 | 加角色 |
 | `src/types/chat.ts` | 消息、引用、传输层类型 | 改协议先改这里 |
 | `src/styles/main.css` | 主题变量与全局样式 | 改配色/间距 |
@@ -108,7 +110,7 @@ flowchart LR
 
 ## 5. 关键链路
 
-### 5.1 登录（后端 B04 已就绪，前端 B06 接入）
+### 5.1 登录（B06 已接入真实接口）
 
 ```mermaid
 sequenceDiagram
