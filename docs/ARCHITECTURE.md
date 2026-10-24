@@ -97,7 +97,7 @@ flowchart LR
 | 包 | 负责 | 关键文件（当前 → 规划） |
 | --- | --- | --- |
 | `com.tutuchacha.ai` | 启动类 | `AiApplication.java` |
-| `config` | 安全、跨域、OpenAPI、JWT 配置 | ✅ `SecurityConfig`、`CorsConfig`、`JwtProperties` → B05 加 `OpenApiConfig` |
+| `config` | 安全、跨域、OpenAPI、JWT 配置 | ✅ `SecurityConfig`、`CorsConfig`、`JwtProperties`、`OpenApiConfig` |
 | `common` | 统一返回、错误码、异常、TraceId | ✅ `Result`、`ErrorCode`、`BusinessException`、`GlobalExceptionHandler`、`TraceIdFilter` |
 | `auth` | 注册、登录、JWT 过滤器 | ✅ `AuthController`、`AuthService`、`JwtService`、`JwtAuthFilter` |
 | `user` | 用户实体与 Mapper | ✅ `User`、`UserMapper` |

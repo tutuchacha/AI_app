@@ -40,8 +40,15 @@ springdoc:
     path: /swagger-ui.html
 
 management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
   health:
     db:
+      enabled: true
+  info:
+    env:
       enabled: true
   endpoints:
     web:
@@ -50,6 +57,12 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+
+info:
+  app:
+    name: 星屿 AI
+    version: 0.0.1-SNAPSHOT
+    description: M0 后端骨架（统一响应 / JWT / 可观测）
 
 logging:
   pattern:
