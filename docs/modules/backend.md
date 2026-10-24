@@ -7,8 +7,8 @@
 ## 0. 速览（只读这节）
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
-- 当前：B01–B03 完成（骨架 + 建库 + 统一响应），下一步 B04
-- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`SecurityConfig`、`common/Result`
+- 当前：B01–B04 完成（骨架 + 建库 + 统一响应 + JWT 登录），下一步 B05
+- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`SecurityConfig`、`auth/`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
 - 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
 

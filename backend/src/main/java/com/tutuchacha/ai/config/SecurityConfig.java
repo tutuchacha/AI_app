@@ -1,6 +1,8 @@
 package com.tutuchacha.ai.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tutuchacha.ai.auth.JwtAuthFilter;
+import com.tutuchacha.ai.auth.JwtService;
 import com.tutuchacha.ai.common.ErrorCode;
 import com.tutuchacha.ai.common.Result;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,21 +17,24 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * M0-B01 临时放行，M0-B04 接入 JWT 后收敛为：仅 /api/auth/** 与文档/健康检查公开。
+ * M0-B04 起：仅注册/登录、健康检查与文档公开，其余需 Bearer token。
  * 未登录/无权限也返回统一 JSON，避免前端收到空 body。
  */
 @Configuration
 public class SecurityConfig {
 
     private final ObjectMapper objectMapper;
+    private final JwtService jwtService;
 
-    public SecurityConfig(ObjectMapper objectMapper) {
+    public SecurityConfig(ObjectMapper objectMapper, JwtService jwtService) {
         this.objectMapper = objectMapper;
+        this.jwtService = jwtService;
     }
 
     @Bean
@@ -49,8 +54,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/api/**").permitAll()
-                        .anyRequest().authenticated());
+                        .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                        .anyRequest().authenticated())
+                .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

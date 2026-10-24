@@ -97,10 +97,10 @@ flowchart LR
 | 包 | 负责 | 关键文件（当前 → 规划） |
 | --- | --- | --- |
 | `com.tutuchacha.ai` | 启动类 | `AiApplication.java` |
-| `config` | 安全、跨域、OpenAPI | `SecurityConfig`、`CorsConfig` → B05 加 `OpenApiConfig` |
+| `config` | 安全、跨域、OpenAPI、JWT 配置 | ✅ `SecurityConfig`、`CorsConfig`、`JwtProperties` → B05 加 `OpenApiConfig` |
 | `common` | 统一返回、错误码、异常、TraceId | ✅ `Result`、`ErrorCode`、`BusinessException`、`GlobalExceptionHandler`、`TraceIdFilter` |
-| `auth` | 注册、登录、JWT 过滤器 | B04 新增 `AuthController`、`AuthService`、`JwtService`、`JwtAuthFilter` |
-| `user` | 用户实体与 Mapper | B04 新增 `User`、`UserMapper` |
+| `auth` | 注册、登录、JWT 过滤器 | ✅ `AuthController`、`AuthService`、`JwtService`、`JwtAuthFilter` |
+| `user` | 用户实体与 Mapper | ✅ `User`、`UserMapper` |
 | `meta` | 健康、版本、模型配置 | M1 起 |
 | `chat` 等业务包 | 各业务垂直闭环 | M1–M5 逐步新增 |
 
@@ -108,7 +108,7 @@ flowchart LR
 
 ## 5. 关键链路
 
-### 5.1 登录（M0-B06 后）
+### 5.1 登录（后端 B04 已就绪，前端 B06 接入）
 
 ```mermaid
 sequenceDiagram
