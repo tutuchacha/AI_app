@@ -4,7 +4,7 @@
 
 - 更新时间：2026-10-24
 - 阶段：**M0 后端 B01–B04 完成**
-- 代码提交：本次（B03 为 `217194d`）
+- 代码提交：`bb3c827`（B04；B03 为 `217194d`）
 - 数据库：`127.0.0.1:3306 / ai_app`，Flyway `V1` 已执行
 - 鉴权：BCrypt + JWT（HS256，2h），`/api/auth/*` 已可用
 - 远程：`git@github.com:tutuchacha/AI_app.git`（已同步）
