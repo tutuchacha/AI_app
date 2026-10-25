@@ -24,6 +24,7 @@
 - M1-03：`POST /api/chat/stream`，事件 `meta/delta/usage/done/error`，断连即取消
 - M1-04：`sseTransport.ts` 接流；模型下拉、用量/耗时页脚、停止生效
 - M1-05：`ConversationService` 落库 + 最近 20 条历史进提示词；`V3` 加 `uid`
+- 交互：`KeepAlive` 保留切页后的聊天；输入框生成中可继续输入，发送/停止后自动聚焦
 - 实测：同会话追问「我叫什么」答「小林」；1500 字散文 1480 tokens 完整结束
 - 验证：30 后端测试通过；typecheck/build 通过；库中消息与 token 记录正确
 

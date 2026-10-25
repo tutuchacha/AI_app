@@ -112,7 +112,9 @@ function logout() {
       <main class="content">
         <RouterView v-slot="{ Component }">
           <transition name="page" mode="out-in">
-            <component :is="Component" />
+            <KeepAlive>
+              <component :is="Component" />
+            </KeepAlive>
           </transition>
         </RouterView>
       </main>

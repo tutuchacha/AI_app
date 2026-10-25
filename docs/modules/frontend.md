@@ -118,6 +118,8 @@ frontend/src/
 
 多轮上下文：同一页面内 `useChat` 复用后端返回的 `conversationId`，后端按它加载历史，所以追问能记住上文。`done.finishReason === 'length'` 时页脚提示「已达长度上限，可发继续」。
 
+会话保留：`AppShell` 用 `<KeepAlive>` 缓存路由组件，切到别的页面再回来消息还在；输入框在生成中不再 `disabled`，发送/停止后自动 `focus()`，不用再点一次。
+
 踩坑记录：SSE 结束时 Tomcat 会以 `ASYNC` 再走一次过滤器链，此时 `SecurityContext` 已清空会 403，前端 `finally` 之前就中断，表现为「已生成完但仍显示生成中、不能输入」。后端放行 `DispatcherType.ASYNC/ERROR` 后解决。
 
 下一步（M1-05 后半）：会话列表与历史改为请求后端，`ChatView` 的 Mock 数组删除。

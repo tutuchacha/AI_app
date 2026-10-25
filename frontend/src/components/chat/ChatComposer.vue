@@ -33,7 +33,16 @@ function submit() {
   if (!value || props.streaming) return
   emit('send', value)
   text.value = ''
-  nextTick(resize)
+  nextTick(() => {
+    resize()
+    // 发送后把焦点还给输入框，避免还要再点一次
+    inputRef.value?.focus()
+  })
+}
+
+function stop() {
+  emit('stop')
+  nextTick(() => inputRef.value?.focus())
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -60,15 +69,14 @@ defineExpose({ fill })
       <textarea
         ref="inputRef"
         v-model="text"
-        :placeholder="placeholder"
+        :placeholder="streaming ? '生成中…可先输入下一条，结束后发送' : placeholder"
         rows="1"
-        :disabled="streaming"
         @input="resize"
         @keydown="onKeydown"
       />
       <div class="actions">
         <span class="hint">Enter 发送 · Shift + Enter 换行</span>
-        <el-button v-if="streaming" round size="small" @click="emit('stop')">
+        <el-button v-if="streaming" round size="small" @click="stop">
           <el-icon><VideoPause /></el-icon>
           停止
         </el-button>
