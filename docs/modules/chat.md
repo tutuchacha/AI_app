@@ -10,7 +10,7 @@
 - 接口：`POST /api/chat/stream`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 下一步：先做 SSE，再补 WebSocket
+- 进度：M1-01 建表完成（`V2__chat.sql`）；下一步 M1-02 `AiGateway`
 
 ## 1. 目标
 
@@ -89,6 +89,7 @@ message(id, conversation_id, role, content, tokens_in, tokens_out, latency_ms, m
 ```
 
 - `message.status`：`STREAMING / DONE / STOPPED / FAILED`。
+- 已执行 `V2__chat.sql`（M1-01）；`message.request_id` 可用于重试与日志关联。
 - 会话标题：首条用户消息截断 30 字；可手动重命名。
 - 短期记忆：最近 20 条或 4k token，超出截断；M4 再加长期记忆表。
 

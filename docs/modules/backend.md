@@ -7,8 +7,8 @@
 ## 0. 速览（只读这节）
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
-- 当前：B01–B05 完成（骨架 + 建库 + 统一响应 + JWT + 文档/指标），下一步 B06
-- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`SecurityConfig`、`auth/`、`OpenApiConfig`
+- 当前：M0 全部完成；M1-01 已建 `conversation`/`message`（V2），下一步 M1-02 `AiGateway`
+- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`V2__chat.sql`、`SecurityConfig`、`auth/`、`OpenApiConfig`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
 - 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
 
