@@ -101,7 +101,7 @@ flowchart LR
 | `com.tutuchacha.ai` | 启动类 | `AiApplication.java` |
 | `config` | 安全、跨域、OpenAPI、JWT 配置 | ✅ `SecurityConfig`、`CorsConfig`、`JwtProperties`、`OpenApiConfig` |
 | `common` | 统一返回、错误码、异常、TraceId | ✅ `Result`、`ErrorCode`、`BusinessException`、`GlobalExceptionHandler`、`TraceIdFilter` |
-| `gateway` | 统一模型调用，隔离 Spring AI | ✅ `AiGateway`、`SpringAiGateway`、`AiProperties`；`AiConfig` 装配 |
+| `gateway` | 统一模型调用，隔离 Spring AI | ✅ `AiGateway`、`SpringAiGateway`、`AiProperties` |
 | `chat` | 聊天：编排、接口、后续 SSE/落库 | ✅ `ChatController`、`ChatOrchestrator`；M1-03 加 SSE |
 | `auth` | 注册、登录、JWT 过滤器 | ✅ `AuthController`、`AuthService`、`JwtService`、`JwtAuthFilter` |
 | `user` | 用户实体与 Mapper | ✅ `User`、`UserMapper` |
