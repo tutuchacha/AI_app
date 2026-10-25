@@ -111,11 +111,9 @@ function logout() {
 
       <main class="content">
         <RouterView v-slot="{ Component }">
-          <transition name="page" mode="out-in">
-            <KeepAlive>
-              <component :is="Component" />
-            </KeepAlive>
-          </transition>
+          <KeepAlive>
+            <component :is="Component" />
+          </KeepAlive>
         </RouterView>
       </main>
     </section>
@@ -387,18 +385,21 @@ function logout() {
   padding: 24px 26px 30px;
 }
 
-.page-enter-active,
-.page-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+/* KeepAlive 与 <transition> 同时使用会导致 onActivated 不触发（切页回来滚动位置丢失），
+   因此淡入改为 CSS 动画：元素重新插入时自动播放，不影响缓存与激活钩子 */
+.content > * {
+  animation: page-in 0.18s ease;
 }
 
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(4px);
-}
-
-.page-leave-to {
-  opacity: 0;
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (max-width: 1080px) {

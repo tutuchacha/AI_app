@@ -85,7 +85,9 @@ frontend/src/
 
 ### F0-07 复用的聊天容器
 - 文件：`components/chat/ChatPanel.vue`
-- 关键：props 决定标题/人设/开场白/建议问题；滚动到底部用 `watch + nextTick`
+- 关键：props 决定标题/人设/开场白/建议问题；`watch + nextTick` 贴底（用户上滑后停止跟随）
+- 导航：右侧 `outline` 每条用户提问一个小横条，hover 展开问题列表，点击跳到该提问并高亮
+- 贴底：`onActivated` 里 `pinToBottom()`（0/60/220/500ms 各贴一次，等列表高度稳定）
 - 验收：对话、陪伴、客服三处复用同一个组件
 
 ### F0-08 三种业务皮肤
@@ -119,6 +121,8 @@ frontend/src/
 多轮上下文：同一页面内 `useChat` 复用后端返回的 `conversationId`，后端按它加载历史，所以追问能记住上文。`done.finishReason === 'length'` 时页脚提示「已达长度上限，可发继续」。
 
 会话保留：`AppShell` 用 `<KeepAlive>` 缓存路由组件，切到别的页面再回来消息还在；输入框在生成中不再 `disabled`，发送/停止后自动 `focus()`，不用再点一次。
+
+踩坑记录：`<KeepAlive>` 外面再包 `<transition>` 会让 `onActivated` 不再触发（切页回来滚动位置丢失、组件却仍是缓存的那份）。现改为 `<KeepAlive>` 直接包路由组件，页面淡入用 CSS `@keyframes page-in`，激活钩子恢复正常。
 
 踩坑记录：SSE 结束时 Tomcat 会以 `ASYNC` 再走一次过滤器链，此时 `SecurityContext` 已清空会 403，前端 `finally` 之前就中断，表现为「已生成完但仍显示生成中、不能输入」。后端放行 `DispatcherType.ASYNC/ERROR` 后解决。
 

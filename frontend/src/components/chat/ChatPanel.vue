@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
 import type { ChatMode } from '@/types/chat'
 import type { Persona } from '@/data/personas'
@@ -63,30 +63,137 @@ const modeLabel = computed(() => {
 })
 const hasUserMessage = computed(() => messages.value.some((item) => item.role === 'user'))
 
+/** 右侧导航：每个用户提问一条，内容太长截断 */
+const questions = computed(() =>
+  messages.value
+    .filter((item) => item.role === 'user')
+    .map((item) => ({
+      id: item.id,
+      text: item.content.replace(/\s+/g, ' ').trim().slice(0, 26),
+    })),
+)
+const outlineOpen = ref(false)
+const activeIndex = ref(-1)
+const stickToBottom = ref(true)
+
 function scrollToBottom() {
   nextTick(() => {
     const el = listRef.value
     if (el) el.scrollTop = el.scrollHeight
+    scheduleActive()
   })
+}
+
+/** 流式输出时每个 token 都会滚一次，高亮刷新做 120ms 合并，避免频繁布局计算 */
+let activeTimer: number | null = null
+function scheduleActive() {
+  if (activeTimer) return
+  activeTimer = window.setTimeout(() => {
+    activeTimer = null
+    updateActive()
+  }, 120)
+}
+
+/** 重新激活时列表高度可能还没稳定，隔几拍再贴底并刷新导航高亮 */
+function pinToBottom() {
+  scrollToBottom()
+  updateActive()
+  for (const delay of [60, 220, 500]) {
+    window.setTimeout(() => {
+      scrollToBottom()
+      updateActive()
+    }, delay)
+  }
+}
+
+function onScroll() {
+  const el = listRef.value
+  if (!el) return
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  updateActive()
+}
+
+function updateActive() {
+  const el = listRef.value
+  if (!el) return
+  const nodes = [...el.querySelectorAll<HTMLElement>('.message.user')]
+  if (!nodes.length) {
+    activeIndex.value = -1
+    return
+  }
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 8) {
+    activeIndex.value = nodes.length - 1
+    return
+  }
+  const line = el.getBoundingClientRect().top + 48
+  let index = -1
+  nodes.forEach((node, i) => {
+    if (node.getBoundingClientRect().top <= line) index = i
+  })
+  activeIndex.value = index
+}
+
+function jumpTo(id: string) {
+  const el = listRef.value
+  if (!el) return
+  const target = el.querySelector<HTMLElement>(`[data-mid="${id}"]`)
+  if (!target) return
+  const top = target.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12
+  el.scrollTop = Math.max(0, top)
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  updateActive()
 }
 
 function pick(text: string) {
   if (streaming.value) return
+  stickToBottom.value = true
   void send(text, model.value)
 }
 
 function handleSend(text: string) {
+  stickToBottom.value = true
   void send(text, model.value)
 }
 
 function restart() {
   reset()
   composerRef.value?.fill('')
+  stickToBottom.value = true
   scrollToBottom()
 }
 
-watch(messages, scrollToBottom, { deep: true })
-onMounted(scrollToBottom)
+watch(
+  messages,
+  () => {
+    if (stickToBottom.value) scrollToBottom()
+  },
+  { deep: true },
+)
+let contentObserver: MutationObserver | null = null
+
+onMounted(() => {
+  scrollToBottom()
+  const el = listRef.value
+  if (!el) return
+  // 内容异步撑高（图片/字体/重新挂载）时，若仍「贴底」就继续贴底
+  contentObserver = new MutationObserver(() => {
+    if (stickToBottom.value) {
+      el.scrollTop = el.scrollHeight
+      scheduleActive()
+    }
+  })
+  contentObserver.observe(el, { childList: true, subtree: true, characterData: true })
+})
+
+onBeforeUnmount(() => contentObserver?.disconnect())
+
+// KeepAlive 缓存后重新进入：固定回最新一条，并刷新导航高亮
+onActivated(() => {
+  stickToBottom.value = true
+  pinToBottom()
+  nextTick(updateActive)
+  window.setTimeout(updateActive, 240)
+})
 
 defineExpose({ reset, restart, send })
 </script>
@@ -122,25 +229,61 @@ defineExpose({ reset, restart, send })
       </div>
     </header>
 
-    <div ref="listRef" class="messages">
-      <div v-if="!messages.length" class="empty">
-        <div class="spark">✦</div>
-        <h3>从一个具体的问题开始</h3>
-        <p>回答由模型逐字流式返回；可随时停止，已生成内容会保留。</p>
-        <div v-if="suggestions.length" class="chips">
-          <button v-for="item in suggestions" :key="item" @click="pick(item)">{{ item }}</button>
+    <div class="messages-wrap">
+      <div ref="listRef" class="messages" @scroll.passive="onScroll">
+        <div v-if="!messages.length" class="empty">
+          <div class="spark">✦</div>
+          <h3>从一个具体的问题开始</h3>
+          <p>回答由模型逐字流式返回；可随时停止，已生成内容会保留。</p>
+          <div v-if="suggestions.length" class="chips">
+            <button v-for="item in suggestions" :key="item" @click="pick(item)">{{ item }}</button>
+          </div>
         </div>
+
+        <template v-else>
+          <MessageItem
+            v-for="message in messages"
+            :key="message.id"
+            :message="message"
+            :data-mid="message.id"
+          />
+
+          <div v-if="suggestions.length && !hasUserMessage" class="chips inline">
+            <button v-for="item in suggestions" :key="item" :disabled="streaming" @click="pick(item)">
+              {{ item }}
+            </button>
+          </div>
+        </template>
       </div>
 
-      <template v-else>
-        <MessageItem v-for="message in messages" :key="message.id" :message="message" />
-
-        <div v-if="suggestions.length && !hasUserMessage" class="chips inline">
-          <button v-for="item in suggestions" :key="item" :disabled="streaming" @click="pick(item)">
-            {{ item }}
+      <nav
+        v-if="questions.length > 1"
+        class="outline"
+        :class="{ open: outlineOpen }"
+        @mouseenter="outlineOpen = true"
+        @mouseleave="outlineOpen = false"
+      >
+        <div class="outline-dots">
+          <i
+            v-for="(question, index) in questions"
+            :key="question.id"
+            :class="{ on: index === activeIndex }"
+            :title="question.text"
+            @click="jumpTo(question.id)"
+          />
+        </div>
+        <div class="outline-list">
+          <p class="outline-title">对话导航</p>
+          <button
+            v-for="(question, index) in questions"
+            :key="question.id"
+            :class="{ on: index === activeIndex }"
+            @click="jumpTo(question.id)"
+          >
+            {{ question.text }}
           </button>
         </div>
-      </template>
+      </nav>
     </div>
 
     <div v-if="error" class="error">{{ error }}</div>
@@ -273,14 +416,109 @@ defineExpose({ reset, restart, send })
   width: 132px;
 }
 
+.messages-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .messages {
   flex: 1;
   min-height: 0;
-  padding: 20px 20px 10px;
+  padding: 20px 38px 10px 20px;
   overflow-y: auto;
   background:
     radial-gradient(60% 40% at 100% 0%, rgba(124, 92, 255, 0.04), transparent 70%),
     #fcfcfe;
+}
+
+.outline {
+  position: absolute;
+  top: 14px;
+  right: 8px;
+  bottom: 14px;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.outline-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #eef0f6;
+  box-shadow: 0 4px 14px rgba(20, 24, 48, 0.06);
+  backdrop-filter: blur(6px);
+}
+
+.outline-dots i {
+  width: 13px;
+  height: 2px;
+  border-radius: 2px;
+  background: #dcdfe9;
+  cursor: pointer;
+  transition: background 0.15s ease, width 0.15s ease;
+}
+
+.outline-dots i.on {
+  width: 17px;
+  background: var(--xy-coral);
+}
+
+.outline-list {
+  display: none;
+  width: 196px;
+  max-height: 100%;
+  padding: 9px;
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid #eef0f6;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 10px 28px rgba(20, 24, 48, 0.12);
+}
+
+.outline.open .outline-list {
+  display: block;
+}
+
+.outline-title {
+  margin: 0 0 6px;
+  padding: 0 6px;
+  color: #9aa0b4;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.outline-list button {
+  display: block;
+  width: 100%;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #6b7086;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.outline-list button:hover {
+  background: #f4f5fa;
+  color: #2f3448;
+}
+
+.outline-list button.on {
+  background: var(--xy-coral-soft);
+  color: var(--xy-coral);
 }
 
 .messages > :deep(.message + .message) {
