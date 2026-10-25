@@ -10,7 +10,7 @@
 - 接口：`POST /api/chat/stream`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 进度：M1-01/02/03/04 完成（建表、AiGateway、SSE、前端接流）；下一步 M1-05 落库与历史
+- 进度：M1-01~04 完成；M1-05 已完成多轮上下文与落库，会话列表/历史恢复待做
 
 ## 1. 目标
 
@@ -42,8 +42,10 @@ Authorization: Bearer <jwt>
 Content-Type: application/json
 Accept: text/event-stream
 
-{ "conversationId": "c1", "content": "你好", "modelId": 1, "useRag": false, "kbIds": [] }
+{ "conversationId": "c_8f3a2b1c9d0e", "content": "你好", "module": "chat", "model": "qwen-plus" }
 ```
+
+`conversationId` 留空 → 后端生成 `c_` 前缀并落库；带已有 ID → 读取该会话最近 20 条消息作为上下文。
 
 响应头：`Cache-Control: no-cache`、`X-Accel-Buffering: no`、`Connection: keep-alive`。
 
@@ -81,17 +83,20 @@ ws://localhost:8080/ws/chat?token=<jwt>
 - 客户端断开/发 `stop` → 取消上游 Flux，已生成内容照常落库。
 - 所有事件带 `requestId`，为多路复用与重连预留。
 - `usage` 依赖 `stream_options.include_usage`（已在网关开启）；取不到时输出 0。
+- `done.finishReason`：`stop` 正常结束、`length` 达到 max-tokens（前端提示可继续）、`stopped` 客户端停止。
 
 ## 5. 数据库
 
 ```sql
-conversation(id, user_id, module, persona_id, kb_id, title, model_id, last_message_at, created_at)
+conversation(id, uid, user_id, module, persona_id, kb_id, title, model_id, last_message_at, created_at)
 message(id, conversation_id, role, content, tokens_in, tokens_out, latency_ms, model, status, created_at)
 ```
 
+- `conversation.uid`：对外 ID（`c_` 前缀），主键仍是 BIGINT；`V3__conversation_uid.sql` 已执行。
 - `message.status`：`STREAMING / DONE / STOPPED / FAILED`。
 - 已执行 `V2__chat.sql`（M1-01）；`message.request_id` 可用于重试与日志关联。
 - 会话标题：首条用户消息截断 30 字；可手动重命名。
+- 多轮上下文：每轮取最近 20 条 `DONE/STOPPED` 消息拼进提示词（M1-05）。
 - 短期记忆：最近 20 条或 4k token，超出截断；M4 再加长期记忆表。
 
 ## 6. 状态机
@@ -125,7 +130,7 @@ interface ChatTransport {
 | M1-02 | `AiGateway` + 非流式 `/api/chat` ✅ | curl 返回一句话 |
 | M1-03 | SSE 接口 + 事件编码 ✅ | curl 能看到逐字输出 |
 | M1-04 | 前端聊天页 + SSE 解析 ✅ | 页面逐字显示、停止生效 |
-| M1-05 | 会话列表/历史/停止/重试 | 刷新可恢复，停止生效 |
+| M1-05 | 上下文落库 ✅ / 会话列表与历史恢复 | 追问记得上文，刷新可恢复 |
 | M1-06 | token/时延指标 + 落库 | Grafana 有曲线 |
 | M1-07 | WebSocket 传输 + 前端切换 | 两通道结果一致 |
 | M1-08 | 错误处理、限流、超时 | 断网/超时有友好提示 |

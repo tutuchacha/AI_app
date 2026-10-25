@@ -26,12 +26,14 @@ export interface ChatRequest {
   model?: string
 }
 
+export type FinishReason = 'stop' | 'length' | 'stopped'
+
 export type ChatEvent =
   | { type: 'meta'; messageId: string; conversationId: string; model: string }
   | { type: 'delta'; content: string }
   | { type: 'citation'; citation: Citation }
   | { type: 'usage'; promptTokens: number; completionTokens: number }
-  | { type: 'done'; finishReason: 'stop' | 'stopped'; latencyMs: number }
+  | { type: 'done'; finishReason: FinishReason; latencyMs: number }
   | { type: 'error'; code: string; message: string }
 
 export interface ChatHandlers {
@@ -39,7 +41,7 @@ export interface ChatHandlers {
   onDelta: (content: string) => void
   onCitation?: (citation: Citation) => void
   onUsage?: (usage: { promptTokens: number; completionTokens: number }) => void
-  onDone?: (event: { finishReason: 'stop' | 'stopped'; latencyMs: number }) => void
+  onDone?: (event: { finishReason: FinishReason; latencyMs: number }) => void
   onError?: (event: { code: string; message: string }) => void
 }
 

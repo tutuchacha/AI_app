@@ -83,4 +83,5 @@ app:
     api-key: ${DASHSCOPE_API_KEY:}
     chat-model: ${AI_CHAT_MODEL:qwen-plus}
     temperature: 0.7
-    max-tokens: 1024
+    # 输出上限：1024 会在一半处截断，qwen-plus 支持更大；可用 AI_MAX_TOKENS 覆盖
+    max-tokens: ${AI_MAX_TOKENS:4096}

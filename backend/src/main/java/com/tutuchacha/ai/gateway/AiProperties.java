@@ -31,6 +31,6 @@ public record AiProperties(
     }
 
     public int maxTokensOrDefault() {
-        return maxTokens == null ? 1024 : maxTokens;
+        return maxTokens == null ? 4096 : maxTokens;
     }
 }

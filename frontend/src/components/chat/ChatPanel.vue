@@ -34,6 +34,7 @@ const {
   lastLatency,
   modelName,
   lastUsage,
+  lastFinishReason,
   send,
   stop,
   reset,
@@ -155,6 +156,7 @@ defineExpose({ reset, restart, send })
       <span>{{ transportName }} transport</span>
       <span v-if="lastLatency !== null">上一条耗时 {{ (lastLatency / 1000).toFixed(2) }}s</span>
       <span v-if="lastUsage">{{ lastUsage.promptTokens }} / {{ lastUsage.completionTokens }} tokens</span>
+      <span v-if="lastFinishReason === 'length'" class="warn">已达长度上限，可发「继续」</span>
       <span>{{ transportName === 'sse' ? modelName : '离线 Mock' }}</span>
     </div>
   </section>
@@ -374,6 +376,10 @@ defineExpose({ reset, restart, send })
   background: #fff;
   color: #b0b3c4;
   font-size: 9.5px;
+}
+
+.panel-foot .warn {
+  color: #d9852f;
 }
 
 .panel-foot span:last-child {

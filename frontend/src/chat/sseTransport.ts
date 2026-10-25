@@ -22,6 +22,7 @@ export class SseChatTransport implements ChatTransport {
         body: JSON.stringify({
           content: request.content,
           conversationId: request.conversationId,
+          module: request.mode,
           model: request.model,
         }),
         signal,
@@ -101,7 +102,10 @@ function dispatch(frame: string, handlers: ChatHandlers): void {
       break
     case 'done':
       handlers.onDone?.({
-        finishReason: event.finishReason === 'stopped' ? 'stopped' : 'stop',
+        finishReason:
+          event.finishReason === 'length' || event.finishReason === 'stopped'
+            ? event.finishReason
+            : 'stop',
         latencyMs: event.latencyMs ?? 0,
       })
       break

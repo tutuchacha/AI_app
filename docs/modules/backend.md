@@ -7,7 +7,7 @@
 ## 0. 速览（只读这节）
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
-- 当前：M1 进行中；M1-01 建表、M1-02 `AiGateway`、M1-03 SSE、M1-04 前端接流完成，下一步 M1-05 落库与历史
+- 当前：M1 进行中；M1-01~04 完成，M1-05 上下文与落库已完成，下一步会话列表与历史恢复
 - 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`V2__chat.sql`、`gateway/`、`chat/`、`SecurityConfig`、`auth/`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
 - 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
@@ -77,6 +77,14 @@ backend/src/main/java/com/tutuchacha/ai/
 - 用量：网关开启 `streamUsage`，最后一帧取 prompt/completion tokens
 - 验收：curl 逐帧输出；断开后日志出现 cancelled；单测校验事件顺序与错误事件
 - 安全链：`SecurityConfig` 放行 `DispatcherType.ASYNC/ERROR`；否则流结束时二次 dispatch 会 403，前端拿不到 `done`
+
+### M1-05 多轮上下文与落库
+- 迁移：`V3__conversation_uid.sql` 给 `conversation` 加 `uid`（对外 `c_` 前缀），主键仍 BIGINT
+- 实现：`ConversationService` 取最近 20 条 `DONE/STOPPED` 消息拼进提示词；每轮写入 user 消息 + assistant 占位行
+- 收尾：`finish()` 回填回答、token、耗时与状态（`DONE/STOPPED/FAILED`），并更新 `last_message_at`
+- 降级：数据库异常或用户不存在时跳过落库，聊天继续可用；会话不属于当前用户返回 403
+- 输出上限：`app.ai.max-tokens` 默认 4096（可用 `AI_MAX_TOKENS` 覆盖）；`done.finishReason` 透传 `stop/length`
+- 验收：同一 `conversationId` 追问能答出上文；30 测试通过；库中 3 轮消息与 token 记录正确
 
 ## 3. 建库命令（已执行，留作换机参考）
 

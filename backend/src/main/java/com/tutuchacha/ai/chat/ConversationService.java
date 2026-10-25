@@ -1,0 +1,175 @@
+package com.tutuchacha.ai.chat;
+
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.tutuchacha.ai.common.BusinessException;
+import com.tutuchacha.ai.common.ErrorCode;
+import com.tutuchacha.ai.gateway.AiMessage;
+import com.tutuchacha.ai.user.User;
+import com.tutuchacha.ai.user.UserMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * 会话与消息落库：负责「取历史 + 存本轮」，让模型看到多轮上下文。
+ * 数据库异常时降级为无记忆，保证聊天本身仍可用。
+ */
+@Service
+public class ConversationService {
+
+    private static final Logger log = LoggerFactory.getLogger(ConversationService.class);
+    /** 带进提示词的历史条数（user + assistant 合计） */
+    private static final int MAX_HISTORY = 20;
+    private static final int TITLE_LENGTH = 30;
+
+    private final ConversationMapper conversationMapper;
+    private final MessageMapper messageMapper;
+    private final UserMapper userMapper;
+
+    public ConversationService(ConversationMapper conversationMapper,
+                               MessageMapper messageMapper,
+                               UserMapper userMapper) {
+        this.conversationMapper = conversationMapper;
+        this.messageMapper = messageMapper;
+        this.userMapper = userMapper;
+    }
+
+    /** 本轮上下文：对外 uid、历史消息、刚插入的两条消息 id。 */
+    public record Context(Long conversationId, String uid, List<AiMessage> history,
+                          Long userMessageId, Long assistantMessageId) {
+    }
+
+    /** 本轮结果，用于回填 assistant 消息。 */
+    public record Finish(String content, int promptTokens, int completionTokens, long latencyMs, String status) {
+    }
+
+    /**
+     * 取历史并写入本轮 user 消息与 assistant 占位行。
+     * conversationId 不存在时按传入 uid 新建；uid 属于其他用户则 403。
+     */
+    @Transactional
+    public Context prepare(String username, String uid, String module, String model,
+                           String content, String requestId) {
+        String conversationUid = StringUtils.hasText(uid) ? uid : newUid();
+        try {
+            User user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getUsername, username));
+            if (user == null) {
+                log.warn("skip persistence: user not found username={}", username);
+                return new Context(null, conversationUid, List.of(), null, null);
+            }
+
+            Conversation conversation = findOrCreate(conversationUid, user.getId(), module, content);
+            List<AiMessage> history = historyOf(conversation.getId());
+            Long userMessageId = insertMessage(conversation.getId(), "user", content,
+                    "DONE", requestId, model);
+            Long assistantMessageId = insertMessage(conversation.getId(), "assistant", "",
+                    "STREAMING", requestId, model);
+            return new Context(conversation.getId(), conversationUid, history, userMessageId, assistantMessageId);
+        } catch (DataAccessException ex) {
+            log.warn("persistence unavailable, continue without memory: {}", ex.getMessage());
+            return new Context(null, conversationUid, List.of(), null, null);
+        }
+    }
+
+    /** 回填 assistant 消息与会话时间；没有落库时静默跳过。 */
+    @Transactional
+    public void finish(Context context, Finish result) {
+        if (context == null || context.assistantMessageId() == null) {
+            return;
+        }
+        try {
+            Message message = new Message();
+            message.setId(context.assistantMessageId());
+            message.setContent(result.content());
+            message.setTokensIn(result.promptTokens());
+            message.setTokensOut(result.completionTokens());
+            message.setLatencyMs((int) result.latencyMs());
+            message.setStatus(result.status());
+            messageMapper.updateById(message);
+
+            Conversation conversation = new Conversation();
+            conversation.setId(context.conversationId());
+            conversation.setLastMessageAt(LocalDateTime.now());
+            conversationMapper.updateById(conversation);
+        } catch (DataAccessException ex) {
+            log.warn("save assistant message failed: {}", ex.getMessage());
+        }
+    }
+
+    private Conversation findOrCreate(String uid, Long userId, String module, String content) {
+        Conversation existing = conversationMapper.selectOne(
+                Wrappers.<Conversation>lambdaQuery().eq(Conversation::getUid, uid));
+        if (existing != null) {
+            if (!userId.equals(existing.getUserId())) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该会话");
+            }
+            return existing;
+        }
+
+        Conversation conversation = new Conversation();
+        conversation.setUid(uid);
+        conversation.setUserId(userId);
+        conversation.setModule(StringUtils.hasText(module) ? module : "chat");
+        conversation.setTitle(titleOf(content));
+        conversation.setLastMessageAt(LocalDateTime.now());
+        try {
+            conversationMapper.insert(conversation);
+            return conversation;
+        } catch (DuplicateKeyException ex) {
+            // 并发下另一个请求已建好同一 uid，复用即可
+            return conversationMapper.selectOne(
+                    Wrappers.<Conversation>lambdaQuery().eq(Conversation::getUid, uid));
+        }
+    }
+
+    private List<AiMessage> historyOf(Long conversationId) {
+        List<Message> rows = messageMapper.selectList(Wrappers.<Message>lambdaQuery()
+                .eq(Message::getConversationId, conversationId)
+                .in(Message::getStatus, "DONE", "STOPPED")
+                .ne(Message::getContent, "")
+                .orderByDesc(Message::getId)
+                .last("LIMIT " + MAX_HISTORY));
+        List<Message> ordered = new ArrayList<>(rows);
+        Collections.reverse(ordered);
+        return ordered.stream()
+                .map(row -> "assistant".equals(row.getRole())
+                        ? AiMessage.assistant(row.getContent())
+                        : AiMessage.user(row.getContent()))
+                .toList();
+    }
+
+    private Long insertMessage(Long conversationId, String role, String content,
+                               String status, String requestId, String model) {
+        Message message = new Message();
+        message.setConversationId(conversationId);
+        message.setRole(role);
+        message.setContent(content);
+        message.setStatus(status);
+        message.setRequestId(requestId);
+        message.setModel(model == null ? "" : model);
+        message.setTokensIn(0);
+        message.setTokensOut(0);
+        message.setLatencyMs(0);
+        messageMapper.insert(message);
+        return message.getId();
+    }
+
+    private String titleOf(String content) {
+        String title = content.replaceAll("\\s+", " ").trim();
+        return title.length() <= TITLE_LENGTH ? title : title.substring(0, TITLE_LENGTH);
+    }
+
+    private String newUid() {
+        return "c_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+}

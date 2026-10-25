@@ -58,11 +58,12 @@ M2 起加 `knowledge_doc`（文档）、`knowledge_chunk`（切片）；M4 起�
 
 演示账号不写死在 SQL 里，由注册接口生成。
 
-## 3. conversation（会话表，V2）
+## 3. conversation（会话表，V2 + V3）
 
 | 字段 | 类型 | 允许空 | 默认/键 | 说明 |
 | --- | --- | --- | --- | --- |
 | id | bigint | 否 | PK, 自增 | 主键 |
+| uid | varchar(32) | 否 | UK `uk_conv_uid` | 对外会话 ID（`c_` 前缀），V3 新增 |
 | user_id | bigint | 否 | FK → `sys_user.id` | 所属用户，删用户级联删会话 |
 | module | varchar(16) | 否 | 默认 `chat` | `chat` / `companion` / `support` / `analysis` |
 | persona_id | bigint | 是 | — | 角色卡 ID（M4 使用） |
@@ -73,7 +74,7 @@ M2 起加 `knowledge_doc`（文档）、`knowledge_chunk`（切片）；M4 起�
 | created_at | datetime | 否 | 默认当前时间 | 创建时间 |
 | updated_at | datetime | 否 | 自动更新 | 更新时间 |
 
-索引：`idx_conv_user_module(user_id, module, last_message_at)`，按用户+模块倒序列会话。
+索引：`idx_conv_user_module(user_id, module, last_message_at)`，按用户+模块倒序列会话；`uk_conv_uid(uid)` 保证对外 ID 唯一。
 
 ## 4. message（消息表，V2）
 

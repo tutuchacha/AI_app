@@ -66,7 +66,8 @@ public class SpringAiGateway implements AiGateway {
                         textOf(response),
                         modelOf(response, request),
                         promptTokensOf(response),
-                        completionTokensOf(response)))
+                        completionTokensOf(response),
+                        finishReasonOf(response)))
                 .onErrorMap(RuntimeException.class, ex -> {
                     log.error("模型流式调用失败 traceId={} model={}", MDC.get("traceId"), resolveModel(request), ex);
                     return new BusinessException(ErrorCode.BAD_GATEWAY, "模型流式调用失败，请稍后重试");
@@ -128,6 +129,13 @@ public class SpringAiGateway implements AiGateway {
     private Integer completionTokensOf(ChatResponse response) {
         Usage usage = response.getMetadata() == null ? null : response.getMetadata().getUsage();
         return usage == null ? null : usage.getCompletionTokens();
+    }
+
+    private String finishReasonOf(ChatResponse response) {
+        if (response.getResult() == null || response.getResult().getMetadata() == null) {
+            return null;
+        }
+        return response.getResult().getMetadata().getFinishReason();
     }
 
     private String textOf(ChatResponse response) {

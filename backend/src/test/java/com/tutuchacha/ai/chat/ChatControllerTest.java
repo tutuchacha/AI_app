@@ -4,12 +4,16 @@ import com.tutuchacha.ai.common.BusinessException;
 import com.tutuchacha.ai.common.ErrorCode;
 import com.tutuchacha.ai.gateway.AiChatRequest;
 import com.tutuchacha.ai.gateway.AiGateway;
+import com.tutuchacha.ai.gateway.AiMessage;
 import com.tutuchacha.ai.gateway.AiStreamChunk;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -17,9 +21,14 @@ import org.springframework.test.web.servlet.MvcResult;
 import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
@@ -39,6 +48,19 @@ class ChatControllerTest {
 
     @MockitoBean
     private AiGateway aiGateway;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @BeforeEach
+    void seedDemoUser() {
+        Integer count = jdbc.queryForObject(
+                "select count(*) from sys_user where username = 'demo'", Integer.class);
+        if (count == null || count == 0) {
+            jdbc.update("insert into sys_user(username, password_hash, nickname, role) "
+                    + "values('demo', 'x', 'demo', 'USER')");
+        }
+    }
 
     @Test
     void chatReturnsAnswerAndGeneratedConversationId() throws Exception {
@@ -157,5 +179,59 @@ class ChatControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
 
         assertThat(body).contains("\"conversationId\":\"c_existing\"");
+    }
+
+    @Test
+    void streamIncludesPreviousTurnsAsContext() throws Exception {
+        when(aiGateway.defaultModel()).thenReturn("qwen-plus");
+        when(aiGateway.stream(any(AiChatRequest.class))).thenReturn(Flux.just(
+                new AiStreamChunk("记住了，你叫小林", "qwen-plus", 10, 5, "stop")));
+
+        String first = streamBody("{\"content\":\"我叫小林\"}");
+        String uid = conversationIdOf(first);
+
+        when(aiGateway.stream(any(AiChatRequest.class))).thenReturn(Flux.just(
+                new AiStreamChunk("你叫小林", "qwen-plus", 20, 5, "stop")));
+        streamBody("{\"content\":\"我叫什么\",\"conversationId\":\"" + uid + "\"}");
+
+        ArgumentCaptor<AiChatRequest> captor = ArgumentCaptor.forClass(AiChatRequest.class);
+        verify(aiGateway, times(2)).stream(captor.capture());
+        List<AiMessage> second = captor.getAllValues().get(1).messages();
+
+        assertThat(second).extracting(AiMessage::role)
+                .containsExactly("system", "user", "assistant", "user");
+        assertThat(second.get(1).content()).isEqualTo("我叫小林");
+        assertThat(second.get(2).content()).isEqualTo("记住了，你叫小林");
+        assertThat(second.get(3).content()).isEqualTo("我叫什么");
+    }
+
+    @Test
+    void doneCarriesFinishReasonAndMetaCarriesMessageId() throws Exception {
+        when(aiGateway.defaultModel()).thenReturn("qwen-plus");
+        when(aiGateway.stream(any(AiChatRequest.class))).thenReturn(Flux.just(
+                new AiStreamChunk("半句", "qwen-plus", 12, 1024, "length")));
+
+        String body = streamBody("{\"content\":\"写长一点\"}");
+
+        assertThat(body).contains("\"finishReason\":\"length\"");
+        assertThat(body).containsPattern("\"messageId\":\"\\d+\"");
+    }
+
+    private String streamBody(String json) throws Exception {
+        MvcResult pending = mockMvc.perform(post("/api/chat/stream")
+                        .with(user("demo").roles("USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        return mockMvc.perform(asyncDispatch(pending))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    }
+
+    private String conversationIdOf(String body) {
+        Matcher matcher = Pattern.compile("\"conversationId\":\"(c_[a-z0-9]+)\"").matcher(body);
+        assertThat(matcher.find()).as("meta 事件应包含会话 ID").isTrue();
+        return matcher.group(1);
     }
 }

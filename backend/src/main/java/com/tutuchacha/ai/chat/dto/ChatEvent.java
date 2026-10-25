@@ -23,7 +23,11 @@ public record ChatEvent(
 ) {
 
     public static ChatEvent meta(String conversationId, String requestId, String model) {
-        return new ChatEvent("meta", requestId, conversationId, null, model,
+        return meta(conversationId, requestId, model, null);
+    }
+
+    public static ChatEvent meta(String conversationId, String requestId, String model, String messageId) {
+        return new ChatEvent("meta", requestId, conversationId, messageId, model,
                 null, null, null, null, null, null, null);
     }
 

@@ -15,6 +15,10 @@ public record ChatRequest(
         @Size(max = 64, message = "会话 ID 最长 64 位")
         String conversationId,
 
+        @Schema(description = "业务模块：chat / companion / support / analysis", example = "chat")
+        @Size(max = 16, message = "模块名最长 16 位")
+        String module,
+
         @Schema(description = "模型名，留空用默认 qwen-plus", example = "qwen-plus")
         @Size(max = 64, message = "模型名最长 64 位")
         String model

@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { ChatMessage, ChatMode, ChatTransport, Citation } from '@/types/chat'
+import type { ChatMessage, ChatMode, ChatTransport, Citation, FinishReason } from '@/types/chat'
 import { mockTransport } from './mockTransport'
 import { sseTransport } from './sseTransport'
 
@@ -35,6 +35,7 @@ export function useChat(options: UseChatOptions) {
   const lastLatency = ref<number | null>(null)
   const modelName = ref('qwen-plus')
   const lastUsage = ref<{ promptTokens: number; completionTokens: number } | null>(null)
+  const lastFinishReason = ref<FinishReason | null>(null)
 
   let controller: AbortController | null = null
   let conversationId = USE_MOCK ? createId('local') : ''
@@ -46,6 +47,7 @@ export function useChat(options: UseChatOptions) {
     error.value = ''
     lastLatency.value = null
     lastUsage.value = null
+    lastFinishReason.value = null
     streaming.value = true
 
     messages.value.push({
@@ -99,6 +101,7 @@ export function useChat(options: UseChatOptions) {
           onDone: (event) => {
             live.status = 'done'
             lastLatency.value = event.latencyMs
+            lastFinishReason.value = event.finishReason
           },
           onError: (event) => {
             live.status = 'failed'
@@ -132,6 +135,7 @@ export function useChat(options: UseChatOptions) {
     error.value = ''
     lastLatency.value = null
     lastUsage.value = null
+    lastFinishReason.value = null
     conversationId = USE_MOCK ? createId('local') : ''
   }
 
@@ -143,6 +147,7 @@ export function useChat(options: UseChatOptions) {
     lastLatency,
     modelName,
     lastUsage,
+    lastFinishReason,
     send,
     stop,
     reset,
