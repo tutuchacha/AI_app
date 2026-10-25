@@ -4,7 +4,7 @@
 
 - 更新时间：2026-10-25
 - 阶段：**M1 进行中**（M1-01 ~ M1-04 完成）
-- 代码提交：M1-04 待提交（前一提交 `97ce973`，M1-03 代码 `e00e14d`）
+- 代码提交：`55df268`（M1-04；M1-03 `e00e14d`）
 - 数据库：`127.0.0.1:3306 / ai_app`，Flyway `V1` + `V2 chat` 已执行
 - 鉴权：BCrypt + JWT（HS256，2h）；`SecurityConfig` 放行 `ASYNC/ERROR`
 - 模型：百炼 `qwen-plus`；前端默认真实 SSE，`VITE_USE_MOCK=true` 才离线
