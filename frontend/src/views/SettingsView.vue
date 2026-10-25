@@ -8,23 +8,23 @@ import { useUiStore } from '@/stores/ui'
 const ui = useUiStore()
 
 const form = reactive({
-  baseUrl: 'http://127.0.0.1:11434',
-  chatModel: 'qwen2.5:7b',
-  embeddingModel: 'bge-m3',
+  baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode',
+  chatModel: 'qwen-plus',
+  embeddingModel: 'text-embedding-v3',
   apiKey: '',
   temperature: 0.7,
 })
 
 const checkpoints = [
   { label: 'JDK 21', done: true, note: 'D:\\JDK21' },
-  { label: 'MySQL 8', done: false, note: '待启动并建库 ai_app' },
-  { label: '后端骨架', done: false, note: 'M0 下一步' },
-  { label: '模型服务', done: false, note: 'Ollama 或云端 Key' },
+  { label: 'MySQL 8', done: true, note: 'ai_app / Flyway V2' },
+  { label: '后端骨架', done: true, note: 'Spring Boot 3.5 + JWT' },
+  { label: '模型服务', done: true, note: '百炼 qwen-plus（SSE 已通）' },
 ]
 
 function save() {
   localStorage.setItem('xy_model_config', JSON.stringify(form))
-  ElMessage.success('已保存到浏览器本地（M0 不请求后端）')
+  ElMessage.success('已保存到浏览器本地（暂不提交后端）')
 }
 </script>
 
@@ -41,7 +41,7 @@ function save() {
         <h1 class="page-title">设置</h1>
         <p class="page-subtitle">模型、Prompt 与偏好。当前配置只保存在浏览器 localStorage。</p>
       </div>
-      <span class="pill"><el-icon><Setting /></el-icon> M0 本地</span>
+      <span class="pill"><el-icon><Setting /></el-icon> 本地配置</span>
     </div>
 
     <div class="settings-grid">

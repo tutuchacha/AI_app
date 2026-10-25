@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import type { ChatMessage, ChatMode, ChatTransport, Citation } from '@/types/chat'
 import { mockTransport } from './mockTransport'
+import { sseTransport } from './sseTransport'
+
+/** VITE_USE_MOCK=true 时走本地假模型，便于离线开发 */
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 interface UseChatOptions {
   mode: ChatMode
@@ -24,21 +28,24 @@ function greetingMessage(text: string): ChatMessage {
 }
 
 export function useChat(options: UseChatOptions) {
-  const transport: ChatTransport = mockTransport
+  const transport: ChatTransport = USE_MOCK ? mockTransport : sseTransport
   const messages = ref<ChatMessage[]>(options.greeting ? [greetingMessage(options.greeting)] : [])
   const streaming = ref(false)
   const error = ref('')
   const lastLatency = ref<number | null>(null)
+  const modelName = ref('qwen-plus')
+  const lastUsage = ref<{ promptTokens: number; completionTokens: number } | null>(null)
 
   let controller: AbortController | null = null
-  let conversationId = createId('local')
+  let conversationId = USE_MOCK ? createId('local') : ''
 
-  async function send(content: string) {
+  async function send(content: string, model?: string) {
     const text = content.trim()
     if (!text || streaming.value) return
 
     error.value = ''
     lastLatency.value = null
+    lastUsage.value = null
     streaming.value = true
 
     messages.value.push({
@@ -60,7 +67,7 @@ export function useChat(options: UseChatOptions) {
     }
     messages.value.push(assistant)
 
-    // 取回数组中的响应式代理：直接修改 push 前的原始对象不会触发视图更新
+    // ȡ�������е���Ӧʽ������ֱ���޸� push ǰ��ԭʼ���󲻻ᴥ����ͼ����
     const live = messages.value[messages.value.length - 1]
 
     controller = new AbortController()
@@ -68,17 +75,26 @@ export function useChat(options: UseChatOptions) {
     try {
       await transport.send(
         {
-          conversationId,
+          conversationId: conversationId || undefined,
           content: text,
           mode: options.mode,
           personaId: options.personaId,
+          model: model || undefined,
         },
         {
+          onMeta: (event) => {
+            if (event.conversationId) conversationId = event.conversationId
+            if (event.model) modelName.value = event.model
+            if (event.messageId) live.id = event.messageId
+          },
           onDelta: (delta) => {
             live.content += delta
           },
           onCitation: (citation: Citation) => {
             live.citations.push(citation)
+          },
+          onUsage: (usage) => {
+            lastUsage.value = usage
           },
           onDone: (event) => {
             live.status = 'done'
@@ -95,7 +111,11 @@ export function useChat(options: UseChatOptions) {
     } catch (cause) {
       const aborted = cause instanceof DOMException && cause.name === 'AbortError'
       live.status = aborted ? 'stopped' : 'failed'
-      if (!aborted) error.value = '连接中断，请稍后重试（M0 Mock 通道）'
+      if (!aborted) {
+        error.value = cause instanceof Error && cause.message
+            ? cause.message
+            : '连接中断，请稍后重试'
+      }
     } finally {
       streaming.value = false
       controller = null
@@ -111,7 +131,8 @@ export function useChat(options: UseChatOptions) {
     messages.value = options.greeting ? [greetingMessage(options.greeting)] : []
     error.value = ''
     lastLatency.value = null
-    conversationId = createId('local')
+    lastUsage.value = null
+    conversationId = USE_MOCK ? createId('local') : ''
   }
 
   return {
@@ -120,6 +141,8 @@ export function useChat(options: UseChatOptions) {
     streaming,
     error,
     lastLatency,
+    modelName,
+    lastUsage,
     send,
     stop,
     reset,

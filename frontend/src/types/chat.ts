@@ -19,7 +19,7 @@ export interface ChatMessage {
 }
 
 export interface ChatRequest {
-  conversationId: string
+  conversationId?: string
   content: string
   mode: ChatMode
   personaId?: string

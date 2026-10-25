@@ -78,7 +78,7 @@ defineExpose({ fill })
         </el-button>
       </div>
     </div>
-    <p class="foot">M0 使用 Mock 流式通道 · 接入后端后切换到 SSE / WebSocket</p>
+    <p class="foot">回答由服务端流式返回，可随时停止；设置 VITE_USE_MOCK=true 可离线</p>
   </div>
 </template>
 

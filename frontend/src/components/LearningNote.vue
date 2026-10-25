@@ -17,7 +17,7 @@ const ui = useUiStore()
       <el-icon :size="16"><Reading /></el-icon>
     </div>
     <div class="body">
-      <div class="eyebrow">本页学习点 · M0</div>
+      <div class="eyebrow">本页学习点 · M1</div>
       <h3>{{ title }}</h3>
       <ul>
         <li v-for="point in points" :key="point">{{ point }}</li>

@@ -5,6 +5,7 @@ import com.tutuchacha.ai.auth.JwtAuthFilter;
 import com.tutuchacha.ai.auth.JwtService;
 import com.tutuchacha.ai.common.ErrorCode;
 import com.tutuchacha.ai.common.Result;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -51,6 +52,8 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, ex) ->
                                 writeJson(response, HttpServletResponse.SC_FORBIDDEN, Result.fail(ErrorCode.FORBIDDEN))))
                 .authorizeHttpRequests(auth -> auth
+                        // SSE 完成时会以 ASYNC 再走一次过滤器链，此时 SecurityContext 已清理，需放行
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

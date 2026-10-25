@@ -80,7 +80,7 @@ export class MockChatTransport implements ChatTransport {
 
     handlers.onMeta?.({
       messageId: `mock-${startedAt}`,
-      conversationId: request.conversationId,
+      conversationId: request.conversationId ?? '',
       model: 'mock-stream',
     })
 

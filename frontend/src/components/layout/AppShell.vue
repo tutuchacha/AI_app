@@ -72,11 +72,11 @@ function logout() {
         <div class="stage-card">
           <div class="stage-head">
             <span>当前阶段</span>
-            <b>M0</b>
+            <b>M1</b>
           </div>
-          <p>界面预览</p>
+          <p>真实流式聊天</p>
           <div class="bar"><i /></div>
-          <small>下一步：后端骨架</small>
+          <small>下一步：会话落库</small>
         </div>
 
         <div class="user">
@@ -100,7 +100,7 @@ function logout() {
           <strong>{{ route.meta.title }}</strong>
         </div>
         <div class="top-actions">
-          <span class="stage-badge">M0 · UI Preview</span>
+          <span class="stage-badge">M1 · SSE Online</span>
           <label class="learn-switch">
             <el-icon :size="15"><Reading /></el-icon>
             <span>学习提示</span>

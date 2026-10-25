@@ -63,7 +63,7 @@ function openConversation(item: Conversation) {
     <LearningNote
       title="Transport 抽象 + 流式 UI"
       :points="['useChat 只管理消息状态', 'ChatTransport 负责发送与中断', 'Mock 与 SSE 可无缝替换']"
-      next="M1：新增 SseChatTransport，页面组件不需要改"
+      next="M1-04 已完成：页面默认走 SSE，设置 VITE_USE_MOCK=true 可离线"
     />
 
     <div class="chat-layout">
@@ -97,7 +97,7 @@ function openConversation(item: Conversation) {
 
         <div class="conv-foot">
           <span class="dot" />
-          历史消息将在 M1 落库
+          历史消息将在 M1-05 落库后恢复
         </div>
       </aside>
 

@@ -45,7 +45,7 @@ export function clearSession(): void {
   localStorage.removeItem(NICK_KEY)
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
+export const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)

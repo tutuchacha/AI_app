@@ -32,6 +32,8 @@ const {
   streaming,
   error,
   lastLatency,
+  modelName,
+  lastUsage,
   send,
   stop,
   reset,
@@ -41,7 +43,7 @@ const {
   greeting: props.greeting,
 })
 
-const model = ref('mock-qwen')
+const model = ref('qwen-plus')
 const listRef = ref<HTMLElement>()
 const composerRef = ref<InstanceType<typeof ChatComposer>>()
 
@@ -49,7 +51,9 @@ const displayTitle = computed(() => props.title || props.persona?.name || '新�
 const displaySubtitle = computed(() => {
   if (props.subtitle) return props.subtitle
   if (props.persona) return `${props.persona.title} · ${props.persona.tagline}`
-  return 'M0 Mock 会话，用于验证界面与流式交互'
+  return transportName === 'sse'
+      ? 'SSE 流式 · 真实模型，逐字返回'
+      : 'Mock 通道，离线验证界面与交互'
 })
 const modeLabel = computed(() => {
   if (props.mode === 'support') return '客服模式'
@@ -67,7 +71,11 @@ function scrollToBottom() {
 
 function pick(text: string) {
   if (streaming.value) return
-  void send(text)
+  void send(text, model.value)
+}
+
+function handleSend(text: string) {
+  void send(text, model.value)
 }
 
 function restart() {
@@ -101,11 +109,11 @@ defineExpose({ reset, restart, send })
       <div class="tools">
         <span class="live" :class="{ on: streaming }">
           <i />
-          {{ streaming ? '生成中' : 'Mock 通道' }}
+          {{ streaming ? '生成中' : transportName === 'sse' ? '已连接' : 'Mock 通道' }}
         </span>
         <el-select v-model="model" size="small" class="model-select" :disabled="streaming">
-          <el-option label="Mock · Qwen" value="mock-qwen" />
-          <el-option label="Mock · DeepSeek" value="mock-deepseek" />
+          <el-option label="qwen-plus" value="qwen-plus" />
+          <el-option label="qwen-turbo" value="qwen-turbo" />
         </el-select>
         <el-button text size="small" title="重新开始" @click="restart">
           <el-icon><RefreshRight /></el-icon>
@@ -117,7 +125,7 @@ defineExpose({ reset, restart, send })
       <div v-if="!messages.length" class="empty">
         <div class="spark">✦</div>
         <h3>从一个具体的问题开始</h3>
-        <p>这是 M0 的界面预览。消息由 Mock 通道逐字返回，用来验证布局、滚动与停止生成。</p>
+        <p>回答由模型逐字流式返回；可随时停止，已生成内容会保留。</p>
         <div v-if="suggestions.length" class="chips">
           <button v-for="item in suggestions" :key="item" @click="pick(item)">{{ item }}</button>
         </div>
@@ -139,14 +147,15 @@ defineExpose({ reset, restart, send })
     <ChatComposer
       ref="composerRef"
       :streaming="streaming"
-      @send="send"
+      @send="handleSend"
       @stop="stop"
     />
 
     <div class="panel-foot">
       <span>{{ transportName }} transport</span>
       <span v-if="lastLatency !== null">上一条耗时 {{ (lastLatency / 1000).toFixed(2) }}s</span>
-      <span>接入后端后切换为 SSE</span>
+      <span v-if="lastUsage">{{ lastUsage.promptTokens }} / {{ lastUsage.completionTokens }} tokens</span>
+      <span>{{ transportName === 'sse' ? modelName : '离线 Mock' }}</span>
     </div>
   </section>
 </template>

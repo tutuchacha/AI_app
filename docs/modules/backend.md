@@ -7,7 +7,7 @@
 ## 0. 速览（只读这节）
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
-- 当前：M1 进行中；M1-01 建表、M1-02 `AiGateway`、M1-03 SSE 完成，下一步 M1-04 前端接流
+- 当前：M1 进行中；M1-01 建表、M1-02 `AiGateway`、M1-03 SSE、M1-04 前端接流完成，下一步 M1-05 落库与历史
 - 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`V2__chat.sql`、`gateway/`、`chat/`、`SecurityConfig`、`auth/`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
 - 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
@@ -76,6 +76,7 @@ backend/src/main/java/com/tutuchacha/ai/
 - 取消：客户端断开 → Reactor 取消订阅，上游停止（日志 `stream cancelled`）
 - 用量：网关开启 `streamUsage`，最后一帧取 prompt/completion tokens
 - 验收：curl 逐帧输出；断开后日志出现 cancelled；单测校验事件顺序与错误事件
+- 安全链：`SecurityConfig` 放行 `DispatcherType.ASYNC/ERROR`；否则流结束时二次 dispatch 会 403，前端拿不到 `done`
 
 ## 3. 建库命令（已执行，留作换机参考）
 

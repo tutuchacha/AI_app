@@ -33,7 +33,7 @@ async function submit() {
   loading.value = true
   try {
     await auth.login(username.value.trim(), password.value)
-    ElMessage.success(auth.isMock ? '已进入 M0 界面预览（Mock）' : '登录成功')
+    ElMessage.success(auth.isMock ? '已进入离线 Mock 预览' : '登录成功')
     await router.push(redirectTarget())
   } catch (error) {
     const message = error instanceof ApiError ? error.message : '登录失败，请稍后重试'
@@ -56,7 +56,7 @@ async function submit() {
       </div>
 
       <div class="pitch">
-        <span class="eyebrow">M0 · UI PREVIEW</span>
+        <span class="eyebrow">M1 · SSE ONLINE</span>
         <h1>把 AI 能力，<br />一步步做成产品。</h1>
         <p>
           聊天、恋爱陪伴、智能客服、文档分析。先看见完整的样子，再一层层补上后端。
@@ -78,7 +78,7 @@ async function submit() {
 
     <section class="form-side">
       <div class="form-card fade-up">
-        <span class="pill">M0 阶段</span>
+        <span class="pill">M1 阶段</span>
         <h2>欢迎回来</h2>
         <p class="sub">真实账号登录，token 由后端签发；开发时可开 Mock 离线预览。</p>
 
