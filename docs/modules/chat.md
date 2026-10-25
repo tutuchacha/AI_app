@@ -10,7 +10,7 @@
 - 接口：`POST /api/chat/stream`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 进度：M1-01 建表、M1-02 `AiGateway` + `/api/chat` 完成；下一步 M1-03 SSE
+- 进度：M1-01/02/03 完成（建表、AiGateway、SSE）；下一步 M1-04 前端接流
 
 ## 1. 目标
 
@@ -80,6 +80,7 @@ ws://localhost:8080/ws/chat?token=<jwt>
 - `delta` 允许为空但不要高频空帧；服务端按 20–50ms 或按 token 批量 flush。
 - 客户端断开/发 `stop` → 取消上游 Flux，已生成内容照常落库。
 - 所有事件带 `requestId`，为多路复用与重连预留。
+- `usage` 依赖 `stream_options.include_usage`（已在网关开启）；取不到时输出 0。
 
 ## 5. 数据库
 
@@ -122,7 +123,7 @@ interface ChatTransport {
 | --- | --- | --- |
 | M1-01 | 会话/消息表 + Flyway | 表存在，CRUD 通过 |
 | M1-02 | `AiGateway` + 非流式 `/api/chat` ✅ | curl 返回一句话 |
-| M1-03 | SSE 接口 + 事件编码 | curl 能看到逐字输出 |
+| M1-03 | SSE 接口 + 事件编码 ✅ | curl 能看到逐字输出 |
 | M1-04 | 前端聊天页 + SSE 解析 | 页面逐字显示 |
 | M1-05 | 会话列表/历史/停止/重试 | 刷新可恢复，停止生效 |
 | M1-06 | token/时延指标 + 落库 | Grafana 有曲线 |

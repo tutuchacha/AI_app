@@ -128,7 +128,7 @@ sequenceDiagram
     S-->>V: 跳转 /chat
 ```
 
-### 5.2 聊天（M1-02 非流式已通，M1-03 加 SSE）
+### 5.2 聊天（M1-03：SSE 已通）
 
 ```mermaid
 sequenceDiagram

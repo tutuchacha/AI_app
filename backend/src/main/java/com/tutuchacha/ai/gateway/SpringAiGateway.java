@@ -17,6 +17,7 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -38,26 +39,14 @@ public class SpringAiGateway implements AiGateway {
 
     @Override
     public AiChatResponse complete(AiChatRequest request) {
-        ChatModel chatModel = chatModelProvider.getIfAvailable();
-        if (chatModel == null) {
-            throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE,
-                    "未配置模型密钥：请设置环境变量 DASHSCOPE_API_KEY 后重启后端");
-        }
-        if (request.messages().isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "消息不能为空");
-        }
-
+        ChatModel chatModel = requireChatModel();
         long startedAt = System.currentTimeMillis();
         try {
-            ChatResponse response = chatModel.call(new Prompt(toSpringMessages(request), buildOptions(request)));
+            ChatResponse response = chatModel.call(new Prompt(toSpringMessages(request), buildOptions(request, false)));
             Usage usage = response.getMetadata().getUsage();
-            String model = StringUtils.hasText(response.getMetadata().getModel())
-                    ? response.getMetadata().getModel()
-                    : resolveModel(request);
-
             return new AiChatResponse(
                     textOf(response),
-                    model,
+                    modelOf(response, request),
                     usage == null || usage.getPromptTokens() == null ? 0 : usage.getPromptTokens(),
                     usage == null || usage.getCompletionTokens() == null ? 0 : usage.getCompletionTokens(),
                     System.currentTimeMillis() - startedAt);
@@ -67,6 +56,35 @@ public class SpringAiGateway implements AiGateway {
             log.error("模型调用失败 traceId={} model={}", MDC.get("traceId"), resolveModel(request), ex);
             throw new BusinessException(ErrorCode.BAD_GATEWAY, "模型调用失败，请稍后重试");
         }
+    }
+
+    @Override
+    public Flux<AiStreamChunk> stream(AiChatRequest request) {
+        ChatModel chatModel = requireChatModel();
+        return chatModel.stream(new Prompt(toSpringMessages(request), buildOptions(request, true)))
+                .map(response -> new AiStreamChunk(
+                        textOf(response),
+                        modelOf(response, request),
+                        promptTokensOf(response),
+                        completionTokensOf(response)))
+                .onErrorMap(RuntimeException.class, ex -> {
+                    log.error("模型流式调用失败 traceId={} model={}", MDC.get("traceId"), resolveModel(request), ex);
+                    return new BusinessException(ErrorCode.BAD_GATEWAY, "模型流式调用失败，请稍后重试");
+                });
+    }
+
+    @Override
+    public String defaultModel() {
+        return properties.chatModelOrDefault();
+    }
+
+    private ChatModel requireChatModel() {
+        ChatModel chatModel = chatModelProvider.getIfAvailable();
+        if (chatModel == null) {
+            throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE,
+                    "未配置模型密钥：请设置环境变量 DASHSCOPE_API_KEY 后重启后端");
+        }
+        return chatModel;
     }
 
     private List<Message> toSpringMessages(AiChatRequest request) {
@@ -84,16 +102,32 @@ public class SpringAiGateway implements AiGateway {
         };
     }
 
-    private OpenAiChatOptions buildOptions(AiChatRequest request) {
+    private OpenAiChatOptions buildOptions(AiChatRequest request, boolean streaming) {
         return OpenAiChatOptions.builder()
                 .model(resolveModel(request))
                 .temperature(request.temperature() == null ? properties.temperatureOrDefault() : request.temperature())
                 .maxTokens(request.maxTokens() == null ? properties.maxTokensOrDefault() : request.maxTokens())
+                .streamUsage(streaming)
                 .build();
     }
 
     private String resolveModel(AiChatRequest request) {
         return StringUtils.hasText(request.model()) ? request.model() : properties.chatModelOrDefault();
+    }
+
+    private String modelOf(ChatResponse response, AiChatRequest request) {
+        String model = response.getMetadata() == null ? null : response.getMetadata().getModel();
+        return StringUtils.hasText(model) ? model : resolveModel(request);
+    }
+
+    private Integer promptTokensOf(ChatResponse response) {
+        Usage usage = response.getMetadata() == null ? null : response.getMetadata().getUsage();
+        return usage == null ? null : usage.getPromptTokens();
+    }
+
+    private Integer completionTokensOf(ChatResponse response) {
+        Usage usage = response.getMetadata() == null ? null : response.getMetadata().getUsage();
+        return usage == null ? null : usage.getCompletionTokens();
     }
 
     private String textOf(ChatResponse response) {

@@ -7,7 +7,7 @@
 ## 0. 速览（只读这节）
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
-- 当前：M1 进行中；M1-01 建表、M1-02 `AiGateway` + `/api/chat` 完成，下一步 M1-03 SSE
+- 当前：M1 进行中；M1-01 建表、M1-02 `AiGateway`、M1-03 SSE 完成，下一步 M1-04 前端接流
 - 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`V2__chat.sql`、`gateway/`、`chat/`、`SecurityConfig`、`auth/`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
 - 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
@@ -70,6 +70,13 @@ backend/src/main/java/com/tutuchacha/ai/
 - 接口：`POST /api/chat`，需 Bearer；没配 Key 时应用照常启动，调用返回 503
 - 验收：真实调用返回回答 + token/耗时；单测覆盖消息映射与 502/503
 
+### M1-03 SSE 流式聊天
+- 接口：`POST /api/chat/stream`，`text/event-stream`；事件 `meta/delta/usage/done/error`
+- 实现：`AiGateway.stream()` 返回 `Flux<AiStreamChunk>`；`ChatOrchestrator` 组装事件，`Flux.defer` 兜住同步异常
+- 取消：客户端断开 → Reactor 取消订阅，上游停止（日志 `stream cancelled`）
+- 用量：网关开启 `streamUsage`，最后一帧取 prompt/completion tokens
+- 验收：curl 逐帧输出；断开后日志出现 cancelled；单测校验事件顺序与错误事件
+
 ## 3. 建库命令（已执行，留作换机参考）
 
 ```sql
@@ -97,7 +104,8 @@ IDEA：打开 `backend/pom.xml`，SDK 选 `D:\JDK21`，Run `AiApplication`，Act
 
 - `AuthControllerTest`：注册、登录、错误密码、无 token 访问受保护接口
 - `ChatControllerTest`：`/api/chat` 成功、会话 ID、参数校验、未登录
-- `SpringAiGatewayTest`：消息映射、无 Key 503、上游异常 502
+- `ChatControllerTest` SSE：事件顺序、`conversationId`、错误转 `error` 事件
+- `SpringAiGatewayTest`：消息映射、无 Key 503、上游异常 502、流式增量与用量
 - `ResultTest`：成功/失败结构一致
 - 手工：Swagger 调一遍三个接口
 
