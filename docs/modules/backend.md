@@ -7,8 +7,8 @@
 ## 0. 速览（只读这节）
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
-- 当前：M0 全部完成；M1-01 已建 `conversation`/`message`（V2），下一步 M1-02 `AiGateway`
-- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`V2__chat.sql`、`SecurityConfig`、`auth/`、`OpenApiConfig`
+- 当前：M1 进行中；M1-01 建表、M1-02 `AiGateway` + `/api/chat` 完成，下一步 M1-03 SSE
+- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`V2__chat.sql`、`gateway/`、`chat/`、`SecurityConfig`、`auth/`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
 - 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
 
@@ -21,6 +21,8 @@ backend/src/main/java/com/tutuchacha/ai/
 ├─ config/        # Security、MyBatis、OpenAPI、CORS
 ├─ auth/          # 注册、登录、JWT 过滤器
 ├─ user/          # 用户实体与 Mapper
+├─ gateway/       # AiGateway 统一模型入口（Spring AI 只在这里出现）
+├─ chat/          # 聊天编排与接口（SSE 在 M1-03）
 └─ meta/          # 健康检查、版本信息（后续放模型配置）
 ```
 
@@ -61,6 +63,13 @@ backend/src/main/java/com/tutuchacha/ai/
 - 保留：`VITE_USE_MOCK=true` 时仍走 Mock，方便离线开发
 - 验收：前端登录写真实 token，刷新保持；未登录访问 `/chat` 仍被守卫拦截
 
+### M1-02 AiGateway 与非流式聊天
+- 依赖：`spring-ai-bom 1.1.8` + `spring-ai-openai`（厂商代码只出现在 `gateway/`）
+- 文件：`gateway/AiGateway`、`SpringAiGateway`、`AiProperties`、`config/AiConfig`、`chat/ChatController`、`ChatOrchestrator`
+- 配置：`app.ai.*`；`base-url` 不带 `/v1`（Spring AI 自己拼 `/v1/chat/completions`）
+- 接口：`POST /api/chat`，需 Bearer；没配 Key 时应用照常启动，调用返回 503
+- 验收：真实调用返回回答 + token/耗时；单测覆盖消息映射与 502/503
+
 ## 3. 建库命令（已执行，留作换机参考）
 
 ```sql
@@ -87,6 +96,8 @@ IDEA：打开 `backend/pom.xml`，SDK 选 `D:\JDK21`，Run `AiApplication`，Act
 ## 5. 最小测试
 
 - `AuthControllerTest`：注册、登录、错误密码、无 token 访问受保护接口
+- `ChatControllerTest`：`/api/chat` 成功、会话 ID、参数校验、未登录
+- `SpringAiGatewayTest`：消息映射、无 Key 503、上游异常 502
 - `ResultTest`：成功/失败结构一致
 - 手工：Swagger 调一遍三个接口
 

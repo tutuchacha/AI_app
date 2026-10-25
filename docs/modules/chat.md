@@ -10,7 +10,7 @@
 - 接口：`POST /api/chat/stream`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 进度：M1-01 建表完成（`V2__chat.sql`）；下一步 M1-02 `AiGateway`
+- 进度：M1-01 建表、M1-02 `AiGateway` + `/api/chat` 完成；下一步 M1-03 SSE
 
 ## 1. 目标
 
@@ -22,7 +22,7 @@
 ## 2. 分层
 
 ```
-Controller/Handler → ChatOrchestrator → AiGateway → Spring AI ChatClient
+Controller/Handler → ChatOrchestrator → AiGateway → Spring AI ChatModel
                           ├─ ChatMemory（短期）
                           ├─ ConversationService（落库）
                           └─ UsageRecorder（指标）
@@ -121,7 +121,7 @@ interface ChatTransport {
 | 步骤 | 内容 | 验证 |
 | --- | --- | --- |
 | M1-01 | 会话/消息表 + Flyway | 表存在，CRUD 通过 |
-| M1-02 | `AiGateway` + 非流式 `/api/chat` | curl 返回一句话 |
+| M1-02 | `AiGateway` + 非流式 `/api/chat` ✅ | curl 返回一句话 |
 | M1-03 | SSE 接口 + 事件编码 | curl 能看到逐字输出 |
 | M1-04 | 前端聊天页 + SSE 解析 | 页面逐字显示 |
 | M1-05 | 会话列表/历史/停止/重试 | 刷新可恢复，停止生效 |

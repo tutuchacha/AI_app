@@ -13,7 +13,9 @@ public enum ErrorCode {
     NOT_FOUND(404, "资源不存在"),
     METHOD_NOT_ALLOWED(405, "请求方法不支持"),
     CONFLICT(409, "数据冲突"),
-    INTERNAL_ERROR(500, "服务器开小差了");
+    INTERNAL_ERROR(500, "服务器开小差了"),
+    BAD_GATEWAY(502, "上游模型调用失败"),
+    SERVICE_UNAVAILABLE(503, "服务暂不可用，请稍后重试");
 
     private final int code;
     private final String message;

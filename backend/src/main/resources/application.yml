@@ -76,3 +76,11 @@ app:
     # 生产必须用环境变量 JWT_SECRET 覆盖（≥32 字节）
     secret: ${JWT_SECRET:dev-only-secret-change-me-please-32bytes}
     expiration: 2h
+  ai:
+    # 百炼 OpenAI 兼容模式；Spring AI 会再拼 /v1/chat/completions，所以这里不带 /v1
+    # Key 只走环境变量，不落仓库
+    base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+    api-key: ${DASHSCOPE_API_KEY:}
+    chat-model: ${AI_CHAT_MODEL:qwen-plus}
+    temperature: 0.7
+    max-tokens: 1024

@@ -1,0 +1,14 @@
+package com.tutuchacha.ai.chat.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "非流式聊天结果")
+public record ChatResult(
+        @Schema(description = "会话 ID，新会话由后端生成") String conversationId,
+        @Schema(description = "模型完整回答") String content,
+        @Schema(description = "实际模型名") String model,
+        @Schema(description = "输入 token") int promptTokens,
+        @Schema(description = "输出 token") int completionTokens,
+        @Schema(description = "耗时（毫秒）") long latencyMs
+) {
+}
