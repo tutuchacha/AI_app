@@ -3,8 +3,8 @@
 > 仪表盘：只写当前，≤35 行 / 1.8k 字符。历史去 progress，决策去 ADR。
 
 - 更新时间：2026-10-26
-- 阶段：**M1 进行中**（M1-01 ~ M1-06 完成）
-- 代码提交：`baab40a`（M1-05 会话列表）；M1-06 见下一条提交
+- 阶段：**M1 进行中**（M1-01 ~ M1-06 + 失败重试 完成）
+- 代码提交：`91adafd`（M1-06）；失败重试见下一条提交
 - 数据库：Flyway `V1` + `V2 chat` + `V3 conversation uid` 已执行
 - 鉴权：BCrypt + JWT（HS256，2h）；`SecurityConfig` 放行 `ASYNC/ERROR`
 - 模型：百炼 `qwen-plus`；`max-tokens` 默认 4096（`AI_MAX_TOKENS` 可覆盖）
@@ -12,9 +12,9 @@
 
 ## 下一步（按顺序）
 
-1. `M1-06` 收尾：装 Docker 后跑 `ops/docker-compose.yml`，确认 Grafana 看板
-2. `M1-05` 补：失败重试（重新生成最后一条）
-3. `M1-07` WebSocket 传输对照
+1. `M1-07` WebSocket 传输对照
+2. 装 Docker 后跑 `ops/docker-compose.yml`，确认 Grafana 看板
+3. `M1-08` 错误处理 / 限流 / 超时
 
 ## 已完成
 
@@ -25,9 +25,10 @@
 - M1-04：`sseTransport.ts` 接流；模型下拉、用量/耗时页脚、停止生效
 - M1-05：落库 + 最近 20 条上下文；会话列表/详情接口；左侧列表真实数据、恢复历史
 - M1-06：`ChatMetrics` 埋点（请求/结果/token/耗时/进行中流）；`ops/` 下 Prometheus + Grafana 编排与看板
+- 重试：`retry:true` 不新增 user 消息；旧半截回答标 `FAILED`；前端「重试 / 重新生成」
 - 交互：`KeepAlive` 保留切页状态；切页回来固定最新；右侧对话导航（横条 + hover 列表 + 跳转高亮）
-- 实测：`ai_chat_requests_total{status="done|stopped"}`、token、P95、`stream_active` 均正确；停止后 gauge 回落 0
-- 验证：37 后端测试通过；typecheck/build/doc-check 通过
+- 实测：重试后 user 消息仍 1 条、列表/详情无重复；`done/stopped` 指标、token、P95、`stream_active` 正确
+- 验证：39 后端测试通过；typecheck/build/doc-check 通过
 
 ## 阻塞
 

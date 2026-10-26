@@ -24,6 +24,7 @@ export class SseChatTransport implements ChatTransport {
           conversationId: request.conversationId,
           module: request.mode,
           model: request.model,
+          retry: request.retry,
         }),
         signal,
       })

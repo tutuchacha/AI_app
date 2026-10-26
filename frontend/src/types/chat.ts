@@ -24,6 +24,8 @@ export interface ChatRequest {
   mode: ChatMode
   personaId?: string
   model?: string
+  /** 重试上一轮失败的回答：后端不再插入新的 user 消息 */
+  retry?: boolean
 }
 
 export type FinishReason = 'stop' | 'length' | 'stopped'

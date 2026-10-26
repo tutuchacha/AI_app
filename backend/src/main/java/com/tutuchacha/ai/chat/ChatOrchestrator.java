@@ -52,13 +52,14 @@ public class ChatOrchestrator {
         String content = request.content().trim();
         String model = resolveModel(request);
         String requestId = newRequestId();
+        boolean retry = Boolean.TRUE.equals(request.retry());
         ConversationService.Context context = conversationService.prepare(
-                username, request.conversationId(), request.module(), model, content, requestId);
+                username, request.conversationId(), request.module(), model, content, requestId, retry);
 
         AiChatResponse response;
         long startedAt = System.currentTimeMillis();
         try {
-            response = aiGateway.complete(new AiChatRequest(model, messagesOf(context, content), null, null));
+            response = aiGateway.complete(new AiChatRequest(model, messagesOf(context, content, retry), null, null));
         } catch (RuntimeException ex) {
             conversationService.finish(context, new ConversationService.Finish("", 0, 0, 0, "FAILED"));
             metrics.failed(request.module(), model, System.currentTimeMillis() - startedAt);
@@ -87,17 +88,18 @@ public class ChatOrchestrator {
         String model = resolveModel(request);
         String requestId = newRequestId();
         long startedAt = System.currentTimeMillis();
+        boolean retry = Boolean.TRUE.equals(request.retry());
 
         ConversationService.Context context;
         try {
             context = conversationService.prepare(
-                    username, request.conversationId(), request.module(), model, content, requestId);
+                    username, request.conversationId(), request.module(), model, content, requestId, retry);
         } catch (BusinessException ex) {
             return Flux.just(errorOf(ex));
         }
 
         String conversationId = context.uid();
-        AiChatRequest aiRequest = new AiChatRequest(model, messagesOf(context, content), null, null);
+        AiChatRequest aiRequest = new AiChatRequest(model, messagesOf(context, content, retry), null, null);
         AtomicInteger promptTokens = new AtomicInteger();
         AtomicInteger completionTokens = new AtomicInteger();
         AtomicReference<String> finishReason = new AtomicReference<>("stop");
@@ -152,13 +154,26 @@ public class ChatOrchestrator {
                 .doFinally(signal -> metrics.streamEnded());
     }
 
-    /** system + 历史 + 本轮 user，历史为空时等价于单轮。 */
-    private List<AiMessage> messagesOf(ConversationService.Context context, String content) {
+    /** system + 历史 + 本轮 user；重试时若历史末尾已是同一条提问，就不再重复追加。 */
+    private List<AiMessage> messagesOf(ConversationService.Context context, String content, boolean retry) {
         List<AiMessage> messages = new ArrayList<>();
         messages.add(AiMessage.system(SYSTEM_PROMPT));
         messages.addAll(context.history());
-        messages.add(AiMessage.user(content));
+        boolean alreadyAsked = retry && !context.history().isEmpty()
+                && "user".equals(lastRole(context.history()))
+                && content.equals(lastContent(context.history()));
+        if (!alreadyAsked) {
+            messages.add(AiMessage.user(content));
+        }
         return messages;
+    }
+
+    private String lastRole(List<AiMessage> history) {
+        return history.get(history.size() - 1).role();
+    }
+
+    private String lastContent(List<AiMessage> history) {
+        return history.get(history.size() - 1).content();
     }
 
     private String resolveModel(ChatRequest request) {

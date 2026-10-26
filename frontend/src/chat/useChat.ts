@@ -44,12 +44,6 @@ export function useChat(options: UseChatOptions) {
     const text = content.trim()
     if (!text || streaming.value) return
 
-    error.value = ''
-    lastLatency.value = null
-    lastUsage.value = null
-    lastFinishReason.value = null
-    streaming.value = true
-
     messages.value.push({
       id: createId('user'),
       role: 'user',
@@ -58,6 +52,35 @@ export function useChat(options: UseChatOptions) {
       status: 'done',
       createdAt: Date.now(),
     })
+
+    await runStream(text, model, false)
+  }
+
+  /** 重试上一条失败/被停止的回答：保留提问，丢掉半截回答后重新生成 */
+  async function retry(model?: string) {
+    if (streaming.value) return
+    let index = -1
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const item = messages.value[i]
+      if (item.role === 'assistant' && (item.status === 'failed' || item.status === 'stopped')) {
+        index = i
+        break
+      }
+    }
+    if (index <= 0) return
+    const question = messages.value[index - 1]
+    if (!question || question.role !== 'user') return
+
+    messages.value.splice(index)
+    await runStream(question.content, model, true)
+  }
+
+  async function runStream(text: string, model: string | undefined, isRetry: boolean) {
+    error.value = ''
+    lastLatency.value = null
+    lastUsage.value = null
+    lastFinishReason.value = null
+    streaming.value = true
 
     const assistant: ChatMessage = {
       id: createId('assistant'),
@@ -82,6 +105,7 @@ export function useChat(options: UseChatOptions) {
           mode: options.mode,
           personaId: options.personaId,
           model: model || undefined,
+          retry: isRetry || undefined,
         },
         {
           onMeta: (event) => {
@@ -162,6 +186,7 @@ export function useChat(options: UseChatOptions) {
     lastFinishReason,
     conversationId,
     send,
+    retry,
     stop,
     reset,
     hydrate,

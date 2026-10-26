@@ -62,10 +62,11 @@ public class ConversationService {
     /**
      * 取历史并写入本轮 user 消息与 assistant 占位行。
      * conversationId 不存在时按传入 uid 新建；uid 属于其他用户则 403。
+     * retry=true 表示重试上一轮失败的回答：不再插入 user 消息，只补一条 assistant 占位行。
      */
     @Transactional
     public Context prepare(String username, String uid, String module, String model,
-                           String content, String requestId) {
+                           String content, String requestId, boolean retry) {
         String conversationUid = StringUtils.hasText(uid) ? uid : newUid();
         try {
             User user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getUsername, username));
@@ -75,8 +76,11 @@ public class ConversationService {
             }
 
             Conversation conversation = findOrCreate(conversationUid, user.getId(), module, content);
+            if (retry) {
+                supersedeStoppedAnswer(conversation.getId());
+            }
             List<AiMessage> history = historyOf(conversation.getId());
-            Long userMessageId = insertMessage(conversation.getId(), "user", content,
+            Long userMessageId = retry ? null : insertMessage(conversation.getId(), "user", content,
                     "DONE", requestId, model);
             Long assistantMessageId = insertMessage(conversation.getId(), "assistant", "",
                     "STREAMING", requestId, model);
@@ -89,7 +93,8 @@ public class ConversationService {
 
     /** 回填 assistant 消息与会话时间；没有落库时静默跳过。 */
     @Transactional
-    public void finish(Context context, Finish result) {        if (context == null || context.assistantMessageId() == null) {
+    public void finish(Context context, Finish result) {
+        if (context == null || context.assistantMessageId() == null) {
             return;
         }
         try {
@@ -186,6 +191,21 @@ public class ConversationService {
             return conversationMapper.selectOne(
                     Wrappers.<Conversation>lambdaQuery().eq(Conversation::getUid, uid));
         }
+    }
+
+    /** 重试时把上一条「停止」的半截回答标成 FAILED，避免它再进上下文和历史详情。 */
+    private void supersedeStoppedAnswer(Long conversationId) {
+        Message last = messageMapper.selectOne(Wrappers.<Message>lambdaQuery()
+                .eq(Message::getConversationId, conversationId)
+                .orderByDesc(Message::getId)
+                .last("LIMIT 1"));
+        if (last == null || !"assistant".equals(last.getRole()) || !"STOPPED".equals(last.getStatus())) {
+            return;
+        }
+        Message patch = new Message();
+        patch.setId(last.getId());
+        patch.setStatus("FAILED");
+        messageMapper.updateById(patch);
     }
 
     private List<AiMessage> historyOf(Long conversationId) {

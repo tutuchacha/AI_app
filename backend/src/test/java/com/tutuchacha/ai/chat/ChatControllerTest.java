@@ -217,6 +217,52 @@ class ChatControllerTest {
         assertThat(body).containsPattern("\"messageId\":\"\\d+\"");
     }
 
+    @Test
+    void retryRegeneratesWithoutDuplicatingUserMessage() throws Exception {
+        when(aiGateway.defaultModel()).thenReturn("qwen-plus");
+        when(aiGateway.stream(any(AiChatRequest.class))).thenReturn(Flux.just(
+                new AiStreamChunk("第一版", "qwen-plus", 5, 3, "stop")));
+        String uid = conversationIdOf(streamBody("{\"content\":\"写首诗\",\"module\":\"chat\"}"));
+
+        when(aiGateway.stream(any(AiChatRequest.class))).thenReturn(Flux.just(
+                new AiStreamChunk("第二版", "qwen-plus", 6, 4, "stop")));
+        String body = streamBody("{\"content\":\"写首诗\",\"conversationId\":\"" + uid
+                + "\",\"module\":\"chat\",\"retry\":true}");
+
+        Integer userMessages = jdbc.queryForObject(
+                "select count(*) from message m join conversation c on c.id = m.conversation_id "
+                        + "where c.uid = ? and m.role = 'user'", Integer.class, uid);
+        assertThat(userMessages).isEqualTo(1);
+        assertThat(body).contains("\"content\":\"第二版\"");
+
+        ArgumentCaptor<AiChatRequest> captor = ArgumentCaptor.forClass(AiChatRequest.class);
+        verify(aiGateway, times(2)).stream(captor.capture());
+        List<AiMessage> retried = captor.getAllValues().get(1).messages();
+        assertThat(retried).extracting(AiMessage::role)
+                .containsExactly("system", "user", "assistant", "user");
+        assertThat(retried.get(3).content()).isEqualTo("写首诗");
+    }
+
+    @Test
+    void retryAfterFailureDoesNotAppendQuestionTwice() throws Exception {
+        when(aiGateway.defaultModel()).thenReturn("qwen-plus");
+        when(aiGateway.stream(any(AiChatRequest.class)))
+                .thenThrow(new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "上游不可用"));
+        String uid = conversationIdOf(streamBody("{\"content\":\"讲个笑话\",\"module\":\"chat\"}"));
+
+        when(aiGateway.stream(any(AiChatRequest.class))).thenReturn(Flux.just(
+                new AiStreamChunk("补上了", "qwen-plus", 8, 3, "stop")));
+        String body = streamBody("{\"content\":\"讲个笑话\",\"conversationId\":\"" + uid
+                + "\",\"module\":\"chat\",\"retry\":true}");
+
+        assertThat(body).contains("\"content\":\"补上了\"").doesNotContain("\"type\":\"error\"");
+        ArgumentCaptor<AiChatRequest> captor = ArgumentCaptor.forClass(AiChatRequest.class);
+        verify(aiGateway, times(2)).stream(captor.capture());
+        assertThat(captor.getAllValues().get(1).messages())
+                .extracting(AiMessage::role)
+                .containsExactly("system", "user");
+    }
+
     private String streamBody(String json) throws Exception {
         MvcResult pending = mockMvc.perform(post("/api/chat/stream")
                         .with(user("demo").roles("USER"))

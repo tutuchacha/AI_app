@@ -21,6 +21,9 @@ public record ChatRequest(
 
         @Schema(description = "模型名，留空用默认 qwen-plus", example = "qwen-plus")
         @Size(max = 64, message = "模型名最长 64 位")
-        String model
+        String model,
+
+        @Schema(description = "重试失败的一轮：不再插入新的 user 消息，直接重新生成", example = "false")
+        Boolean retry
 ) {
 }

@@ -36,6 +36,7 @@ const {
   lastUsage,
   lastFinishReason,
   send,
+  retry,
   stop,
   reset,
   hydrate,
@@ -157,6 +158,18 @@ function pick(text: string) {
 function handleSend(text: string) {
   stickToBottom.value = true
   void send(text, model.value).then(() => emit('changed', conversationId.value))
+}
+
+/** 最后一条是失败/停止的回答时给出重试入口 */
+const canRetry = computed(() => {
+  const last = messages.value[messages.value.length - 1]
+  return !!last && last.role === 'assistant' && (last.status === 'failed' || last.status === 'stopped')
+})
+
+function handleRetry() {
+  if (streaming.value) return
+  stickToBottom.value = true
+  void retry(model.value).then(() => emit('changed', conversationId.value))
 }
 
 /** 后端历史 → 组件消息；status 用大写存储，这里转成前端的小写 */
@@ -318,7 +331,14 @@ defineExpose({ reset, restart, send, loadConversation })
       </nav>
     </div>
 
-    <div v-if="error" class="error">{{ error }}</div>
+    <div v-if="error" class="error">
+      <span>{{ error }}</span>
+      <button v-if="canRetry" class="retry" @click="handleRetry">重试</button>
+    </div>
+    <div v-else-if="canRetry" class="error soft">
+      <span>这一条没有生成完</span>
+      <button class="retry" @click="handleRetry">重新生成</button>
+    </div>
 
     <ChatComposer
       ref="composerRef"
@@ -629,12 +649,36 @@ defineExpose({ reset, restart, send, loadConversation })
 }
 
 .error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin: 0 18px 8px;
   padding: 8px 11px;
   border-radius: 9px;
   background: var(--xy-coral-soft);
   color: #d95245;
   font-size: 11.5px;
+}
+
+.error.soft {
+  background: #f4f5fa;
+  color: #7b8199;
+}
+
+.retry {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.retry:hover {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .panel-foot {
