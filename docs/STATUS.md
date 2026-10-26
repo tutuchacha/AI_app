@@ -4,7 +4,7 @@
 
 - 更新时间：2026-10-26
 - 阶段：**M1 进行中**（M1-01 ~ M1-05 完成）
-- 代码提交：`d3a5658`（交互修复）；M1-05 `4c36a6c`
+- 代码提交：`baab40a`（M1-05 会话列表）；交互修复 `d3a5658`
 - 数据库：Flyway `V1` + `V2 chat` + `V3 conversation uid` 已执行
 - 鉴权：BCrypt + JWT（HS256，2h）；`SecurityConfig` 放行 `ASYNC/ERROR`
 - 模型：百炼 `qwen-plus`；`max-tokens` 默认 4096（`AI_MAX_TOKENS` 可覆盖）
