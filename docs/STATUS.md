@@ -3,7 +3,7 @@
 > 仪表盘：只写当前，≤35 行 / 1.8k 字符。历史去 progress，决策去 ADR。
 
 - 更新时间：2026-10-26
-- 阶段：**M1 完成**（M1-01 ~ M1-08 + 失败重试 + WS）
+- 阶段：**M1 完成**（M1-01 ~ M1-09 + 失败重试）
 - 数据库：Flyway `V1` + `V2 chat` + `V3 conversation uid` 已执行
 - 鉴权：BCrypt + JWT（HS256，2h）；`SecurityConfig` 放行 `ASYNC/ERROR` 与 `/ws/**`
 - 模型：百炼 `qwen-plus`；`max-tokens` 默认 4096；超时默认 60s
@@ -13,7 +13,7 @@
 
 1. **M2 RAG**：知识库表、文档上传解析、切片与检索、`citation` 事件
 2. 装 Docker 后跑 `ops/docker-compose.yml`，确认 Grafana 看板
-3. 可选：WS 心跳/重连；多实例限流换 Redis（M6）
+3. 可选：多实例限流换 Redis（M6）
 
 ## 已完成
 
@@ -26,8 +26,9 @@
 - M1-06：`ChatMetrics` 埋点；`ops/` 下 Prometheus + Grafana 编排与看板
 - M1-07：`/ws/chat?token=JWT` + `WsChatTransport`；头部 `SSE / WS` 切换并记忆
 - M1-08：单机限流 20 轮/分钟（429 / `RATE_LIMITED`）；模型超时 60s（504 / `LLM_TIMEOUT`）；上游 429 同样映射
-- 实测：限流在浏览器出现「请求过于频繁」+ 重试；`AI_TIMEOUT=1ms` 时 REST 504、SSE/WS 收到 `LLM_TIMEOUT`
-- 验证：46 后端测试通过；typecheck/build/doc-check 通过
+- M1-09：WS 改持久连接（一次握手多轮）；`stop` 不断连、20s 心跳、断线重连；页脚显示握手/复用/首字耗时
+- 实测：WS 握手 1 次连跑 4 轮，stop 后继续可用；切 SSE 正常、切回 WS 重新握手；限流/超时提示均可重试
+- 验证：48 后端测试通过；typecheck/build/doc-check 通过
 
 ## 阻塞
 

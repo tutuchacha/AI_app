@@ -10,7 +10,7 @@
 - 接口：`POST /api/chat/stream`（SSE）、`WS /ws/chat`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 进度：M1-01~08 完成（多轮上下文、落库、会话列表与历史恢复、WS、限流与超时）；M1-06 指标见 `observability.md`
+- 进度：M1-01~09 完成（多轮上下文、落库、会话列表与历史恢复、WS 持久连接、限流与超时）；M1-06 指标见 `observability.md`
 
 ## 1. 目标
 
@@ -56,15 +56,17 @@ Accept: text/event-stream
 - 只返回当前用户的会话：别人的 403、不存在 404；时间字段为本地 ISO-8601 字符串
 - 实现：`ConversationController` → `ConversationService.listSummaries/detail`
 
-### WebSocket（M1-07）
+### WebSocket（M1-09 持久连接）
 
 ```
 ws://localhost:8080/ws/chat?token=<jwt>
 ```
 
-- 一条连接跑一轮：连接后客户端发一帧请求体（同 SSE 的 JSON，含 `retry`），服务端回 `ChatEvent` 帧
-- 帧无 `data:` 前缀；`done/error` 后服务端关闭连接
-- 客户端关闭连接 = 停止生成（消息标 `STOPPED`）；握手失败返回 401
+- 一次握手跑多轮，同一连接同时只跑一轮；`done/error` 后连接保留
+- 客户端帧：`{"type":"chat","content":...,"module":...}`、`{"type":"stop"}`、`{"type":"ping"}`
+- 服务端帧：`ChatEvent`（同 SSE）或 `{"type":"pong"}`；`stop` 只取消当前轮（消息标 `STOPPED`）
+- 客户端每 20s ping，45s 无 pong 视为假死；断线后下次发送自动重连
+- 握手失败返回 401；页脚显示「握手 N 次 / 复用 N 轮 / 首字 Xms」
 
 ## 4. 事件协议
 
@@ -94,9 +96,9 @@ conversation(id, uid, user_id, module, persona_id, kb_id, title, model_id, last_
 message(id, conversation_id, role, content, tokens_in, tokens_out, latency_ms, model, status, created_at)
 ```
 
-- `conversation.uid`：对外 ID（`c_` 前缀），主键仍是 BIGINT；`V3__conversation_uid.sql` 已执行。
+- `conversation.uid`：对外 ID（`c_` 前缀），主键为 BIGINT（`V3`）。
 - `message.status`：`STREAMING / DONE / STOPPED / FAILED`。
-- 已执行 `V2__chat.sql`（M1-01）；`message.request_id` 可用于重试与日志关联。
+- `V2__chat.sql` 已执行；`request_id` 用于重试与日志关联。
 - 会话标题：首条用户消息截断 30 字；可手动重命名。
 - 多轮上下文：每轮取最近 20 条 `DONE/STOPPED` 消息拼进提示词（M1-05）。
 - 短期记忆：最近 20 条或 4k token，超出截断；M4 再加长期记忆表。
@@ -122,7 +124,7 @@ interface ChatTransport {
 ```
 
 - `SseChatTransport`：fetch + `ReadableStream` + `TextDecoder`，按 `\n\n` 切事件。
-- `WsChatTransport`：`/ws/chat?token=JWT`，首帧发请求体；关闭连接即停止。
+- `WsChatTransport`：持久连接 `/ws/chat?token=JWT`；`chat/stop/ping` 帧，断线自动重连；页脚统计握手/复用/首字耗时。
 - 页面头部 `SSE / WS` 切换（存 `localStorage.xy_transport`）；`useChat()` 只依赖 `ChatTransport`。
 - 渲染：`markdown-it` + `highlight.js` + `DOMPurify`；超过 200 条启用虚拟滚动。
 
@@ -138,16 +140,14 @@ interface ChatTransport {
 | M1-06 | token/时延指标 + 落库 ✅ | Grafana 有曲线 |
 | M1-07 | WebSocket 传输 + 前端切换 ✅ | 两通道结果一致 |
 | M1-08 | 错误处理、限流、超时 ✅ | 429/504 有友好提示，可重试 |
+| M1-09 | WS 持久连接 + 心跳/重连 ✅ | 一次握手多轮，stop 不断连 |
 
 ## 9. 测试清单
 
-- [ ] 空会话首条消息自动建会话
 - [ ] 客户端中途断开，消息标记 `STOPPED`，无孤儿线程
 - [ ] 模型 429/超时 → `error` 事件 + 可重试
-- [ ] 同一用户并发两个请求互不串流
 - [ ] SSE 经 Nginx 不缓冲（`proxy_buffering off`）
 - [ ] WS 断线重连后历史不丢
-- [ ] 超长输入被截断/拒绝，且有提示
 
 ## 10. 暂不做
 
