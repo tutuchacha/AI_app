@@ -122,11 +122,13 @@ frontend/src/
 
 会话保留：`AppShell` 用 `<KeepAlive>` 缓存路由组件，切到别的页面再回来消息还在；输入框在生成中不再 `disabled`，发送/停止后自动 `focus()`，不用再点一次。
 
+会话列表与恢复（M1-05）：`ChatView` 挂载时 `GET /api/conversations?module=chat` 拉真实列表并自动打开最近一条；点列表项 `GET /api/conversations/{uid}` → `panelRef.loadConversation(detail)` → `useChat.hydrate(uid, messages)`，消息接上同一 `conversationId`，可继续追问。每轮结束 `ChatPanel` 抛 `changed(uid)`，`ChatView` 刷新列表（新会话出现、排序与时间更新）。`新对话` 只重置面板，首条消息落库后才出现在列表里。
+
 踩坑记录：`<KeepAlive>` 外面再包 `<transition>` 会让 `onActivated` 不再触发（切页回来滚动位置丢失、组件却仍是缓存的那份）。现改为 `<KeepAlive>` 直接包路由组件，页面淡入用 CSS `@keyframes page-in`，激活钩子恢复正常。
 
 踩坑记录：SSE 结束时 Tomcat 会以 `ASYNC` 再走一次过滤器链，此时 `SecurityContext` 已清空会 403，前端 `finally` 之前就中断，表现为「已生成完但仍显示生成中、不能输入」。后端放行 `DispatcherType.ASYNC/ERROR` 后解决。
 
-下一步（M1-05 后半）：会话列表与历史改为请求后端，`ChatView` 的 Mock 数组删除。
+下一步（M1-06）：token/时延指标接 Grafana；失败重试与 WebSocket 对照随后。
 
 ## 5. 已知限制
 

@@ -38,7 +38,7 @@ export function useChat(options: UseChatOptions) {
   const lastFinishReason = ref<FinishReason | null>(null)
 
   let controller: AbortController | null = null
-  let conversationId = USE_MOCK ? createId('local') : ''
+  const conversationId = ref(USE_MOCK ? createId('local') : '')
 
   async function send(content: string, model?: string) {
     const text = content.trim()
@@ -77,7 +77,7 @@ export function useChat(options: UseChatOptions) {
     try {
       await transport.send(
         {
-          conversationId: conversationId || undefined,
+          conversationId: conversationId.value || undefined,
           content: text,
           mode: options.mode,
           personaId: options.personaId,
@@ -85,7 +85,7 @@ export function useChat(options: UseChatOptions) {
         },
         {
           onMeta: (event) => {
-            if (event.conversationId) conversationId = event.conversationId
+            if (event.conversationId) conversationId.value = event.conversationId
             if (event.model) modelName.value = event.model
             if (event.messageId) live.id = event.messageId
           },
@@ -136,7 +136,19 @@ export function useChat(options: UseChatOptions) {
     lastLatency.value = null
     lastUsage.value = null
     lastFinishReason.value = null
-    conversationId = USE_MOCK ? createId('local') : ''
+    conversationId.value = USE_MOCK ? createId('local') : ''
+  }
+
+  /** 恢复后端历史：切会话或刷新页面时用，替换当前消息并接上 conversationId */
+  function hydrate(uid: string, rows: ChatMessage[]) {
+    stop()
+    messages.value = rows
+    conversationId.value = uid
+    error.value = ''
+    lastLatency.value = null
+    lastUsage.value = null
+    lastFinishReason.value = null
+    streaming.value = false
   }
 
   return {
@@ -148,8 +160,10 @@ export function useChat(options: UseChatOptions) {
     modelName,
     lastUsage,
     lastFinishReason,
+    conversationId,
     send,
     stop,
     reset,
+    hydrate,
   }
 }

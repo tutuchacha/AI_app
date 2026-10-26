@@ -1,26 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
+import { getConversation, listConversations } from '@/api/conversations'
+import type { ConversationDetail, ConversationSummary } from '@/api/conversations'
 
-interface Conversation {
-  id: string
-  title: string
-  time: string
-}
-
-const conversations = ref<Conversation[]>([
-  { id: 'c1', title: '如何准备一次自然的表白', time: '10:24' },
-  { id: 'c2', title: 'RAG 的切片大小怎么选', time: '09:41' },
-  { id: 'c3', title: '帮我拆解一个客服流程', time: '昨天' },
-  { id: 'c4', title: '周末约会计划', time: '昨天' },
-  { id: 'c5', title: 'Spring AI 和 LangChain4j 对比', time: '周一' },
-])
-
+const conversations = ref<ConversationSummary[]>([])
 const keyword = ref('')
 const activeId = ref<string | null>(null)
+const loading = ref(false)
 const panelRef = ref<InstanceType<typeof ChatPanel>>()
 
 const filtered = computed(() => {
@@ -30,7 +20,7 @@ const filtered = computed(() => {
 })
 
 const activeTitle = computed(() => {
-  const item = conversations.value.find((row) => row.id === activeId.value)
+  const item = conversations.value.find((row) => row.uid === activeId.value)
   return item?.title ?? '新对话'
 })
 
@@ -40,22 +30,59 @@ const suggestions = [
   '恋爱陪伴和普通聊天有什么区别？',
 ]
 
-function newChat() {
-  const item: Conversation = {
-    id: `c-${Date.now()}`,
-    title: '新的对话',
-    time: '刚刚',
+/** 今天显示时分，昨天显示「昨天」，更早显示月-日 */
+function formatTime(iso: string) {
+  const time = new Date(iso)
+  if (Number.isNaN(time.getTime())) return ''
+  const now = new Date()
+  const sameDay = time.toDateString() === now.toDateString()
+  if (sameDay) {
+    return `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
   }
-  conversations.value.unshift(item)
-  activeId.value = item.id
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (time.toDateString() === yesterday.toDateString()) return '昨天'
+  return `${time.getMonth() + 1}-${time.getDate()}`
+}
+
+async function refresh() {
+  loading.value = true
+  try {
+    conversations.value = await listConversations('chat')
+  } catch (cause) {
+    ElMessage.error(cause instanceof Error ? cause.message : '会话列表加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function openConversation(item: ConversationSummary) {
+  if (item.uid === activeId.value) return
+  try {
+    const detail: ConversationDetail = await getConversation(item.uid)
+    activeId.value = detail.uid
+    panelRef.value?.loadConversation(detail)
+  } catch (cause) {
+    ElMessage.error(cause instanceof Error ? cause.message : '会话加载失败')
+  }
+}
+
+/** 一轮问答结束：刷新列表（新会话出现、排序与时间更新），并同步选中项 */
+function onChanged(uid: string) {
+  activeId.value = uid || null
+  void refresh()
+}
+
+function newChat() {
+  activeId.value = null
   panelRef.value?.restart()
 }
 
-function openConversation(item: Conversation) {
-  activeId.value = item.id
-  panelRef.value?.restart()
-  ElMessage.info('M1 接入会话持久化后，这里会恢复历史消息')
-}
+onMounted(async () => {
+  await refresh()
+  const latest = conversations.value[0]
+  if (latest) await openConversation(latest)
+})
 </script>
 
 <template>
@@ -84,20 +111,22 @@ function openConversation(item: Conversation) {
         <div class="conv-list">
           <button
             v-for="item in filtered"
-            :key="item.id"
+            :key="item.uid"
             class="conv-item"
-            :class="{ active: item.id === activeId }"
+            :class="{ active: item.uid === activeId }"
             @click="openConversation(item)"
           >
             <span class="conv-title">{{ item.title }}</span>
-            <span class="conv-time">{{ item.time }}</span>
+            <span class="conv-time">{{ formatTime(item.lastMessageAt) }}</span>
           </button>
-          <p v-if="!filtered.length" class="empty-tip">没有匹配的会话</p>
+          <p v-if="!filtered.length" class="empty-tip">
+            {{ loading ? '加载中…' : keyword ? '没有匹配的会话' : '还没有会话，先问一句试试' }}
+          </p>
         </div>
 
         <div class="conv-foot">
           <span class="dot" />
-          历史消息将在 M1-05 落库后恢复
+          会话已落库，刷新后可从左侧恢复
         </div>
       </aside>
 
@@ -106,6 +135,7 @@ function openConversation(item: Conversation) {
         :title="activeTitle"
         :suggestions="suggestions"
         class="chat-panel"
+        @changed="onChanged"
       />
     </div>
   </div>

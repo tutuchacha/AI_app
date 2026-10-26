@@ -3,6 +3,8 @@ package com.tutuchacha.ai.chat;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.tutuchacha.ai.common.BusinessException;
 import com.tutuchacha.ai.common.ErrorCode;
+import com.tutuchacha.ai.chat.dto.ConversationDetail;
+import com.tutuchacha.ai.chat.dto.ConversationSummary;
 import com.tutuchacha.ai.gateway.AiMessage;
 import com.tutuchacha.ai.user.User;
 import com.tutuchacha.ai.user.UserMapper;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -31,6 +34,9 @@ public class ConversationService {
     /** 带进提示词的历史条数（user + assistant 合计） */
     private static final int MAX_HISTORY = 20;
     private static final int TITLE_LENGTH = 30;
+    private static final int MAX_CONVERSATIONS = 50;
+    private static final int MAX_DETAIL_MESSAGES = 200;
+    private static final DateTimeFormatter ISO_LOCAL_DATE_TIME = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
@@ -83,8 +89,7 @@ public class ConversationService {
 
     /** 回填 assistant 消息与会话时间；没有落库时静默跳过。 */
     @Transactional
-    public void finish(Context context, Finish result) {
-        if (context == null || context.assistantMessageId() == null) {
+    public void finish(Context context, Finish result) {        if (context == null || context.assistantMessageId() == null) {
             return;
         }
         try {
@@ -104,6 +109,57 @@ public class ConversationService {
         } catch (DataAccessException ex) {
             log.warn("save assistant message failed: {}", ex.getMessage());
         }
+    }
+
+    /** 左侧会话列表：只返回当前用户的会话，按最后消息时间倒序。 */
+    public List<ConversationSummary> listSummaries(String username, String module) {
+        User user = findUser(username);
+        if (user == null) {
+            return List.of();
+        }
+        List<Conversation> rows = conversationMapper.selectList(Wrappers.<Conversation>lambdaQuery()
+                .eq(Conversation::getUserId, user.getId())
+                .eq(StringUtils.hasText(module), Conversation::getModule, module)
+                .orderByDesc(Conversation::getLastMessageAt)
+                .last("LIMIT " + MAX_CONVERSATIONS));
+        return rows.stream()
+                .map(row -> new ConversationSummary(row.getUid(), row.getTitle(), row.getModule(),
+                        iso(row.getLastMessageAt())))
+                .toList();
+    }
+
+    /** 会话详情：uid 不存在 404，属于别人 403。 */
+    public ConversationDetail detail(String username, String uid) {
+        User user = findUser(username);
+        Conversation conversation = user == null ? null : conversationMapper.selectOne(
+                Wrappers.<Conversation>lambdaQuery().eq(Conversation::getUid, uid));
+        if (conversation == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "会话不存在");
+        }
+        if (!conversation.getUserId().equals(user.getId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该会话");
+        }
+        List<Message> rows = messageMapper.selectList(Wrappers.<Message>lambdaQuery()
+                .eq(Message::getConversationId, conversation.getId())
+                .in(Message::getStatus, "DONE", "STOPPED")
+                .ne(Message::getContent, "")
+                .orderByAsc(Message::getId)
+                .last("LIMIT " + MAX_DETAIL_MESSAGES));
+        List<ConversationDetail.Item> messages = rows.stream()
+                .map(row -> new ConversationDetail.Item(row.getId(), row.getRole(), row.getContent(),
+                        row.getStatus(), row.getTokensIn(), row.getTokensOut(), row.getLatencyMs(),
+                        row.getModel(), iso(row.getCreatedAt())))
+                .toList();
+        return new ConversationDetail(conversation.getUid(), conversation.getTitle(),
+                conversation.getModule(), messages);
+    }
+
+    private User findUser(String username) {
+        return userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getUsername, username));
+    }
+
+    private String iso(LocalDateTime time) {
+        return time == null ? "" : time.format(ISO_LOCAL_DATE_TIME);
     }
 
     private Conversation findOrCreate(String uid, Long userId, String module, String content) {

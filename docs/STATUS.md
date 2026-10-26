@@ -2,9 +2,9 @@
 
 > 仪表盘：只写当前，≤35 行 / 1.8k 字符。历史去 progress，决策去 ADR。
 
-- 更新时间：2026-10-25
-- 阶段：**M1 进行中**（M1-01 ~ M1-04 完成；M1-05 上下文/落库完成）
-- 代码提交：`4c36a6c`（M1-05；M1-04 `55df268`）
+- 更新时间：2026-10-26
+- 阶段：**M1 进行中**（M1-01 ~ M1-05 完成）
+- 代码提交：`d3a5658`（交互修复）；M1-05 `4c36a6c`
 - 数据库：Flyway `V1` + `V2 chat` + `V3 conversation uid` 已执行
 - 鉴权：BCrypt + JWT（HS256，2h）；`SecurityConfig` 放行 `ASYNC/ERROR`
 - 模型：百炼 `qwen-plus`；`max-tokens` 默认 4096（`AI_MAX_TOKENS` 可覆盖）
@@ -12,8 +12,8 @@
 
 ## 下一步（按顺序）
 
-1. `M1-05` 后半：会话列表 `GET /api/conversations`、历史恢复、重试
-2. `M1-06` token/时延指标接 Grafana
+1. `M1-06` token/时延指标接 Grafana
+2. `M1-05` 补：失败重试（重新生成最后一条）
 3. `M1-07` WebSocket 传输对照
 
 ## 已完成
@@ -23,11 +23,10 @@
 - M1-02：`gateway/`（`AiGateway` + Spring AI 实现）、`POST /api/chat`
 - M1-03：`POST /api/chat/stream`，事件 `meta/delta/usage/done/error`，断连即取消
 - M1-04：`sseTransport.ts` 接流；模型下拉、用量/耗时页脚、停止生效
-- M1-05：`ConversationService` 落库 + 最近 20 条历史进提示词；`V3` 加 `uid`
-- 交互：`KeepAlive` 保留切页后的聊天；输入框生成中可继续输入，发送/停止后自动聚焦
-- 交互：切页回来固定回最新一条（`onActivated` 多次贴底）；右侧对话导航（横条 + hover 列表 + 点击跳转 + 高亮）
-- 实测：同会话追问「我叫什么」答「小林」；1500 字散文 1480 tokens 完整结束
-- 验证：30 后端测试通过；typecheck/build 通过；浏览器实测切页贴底、导航跳转/高亮正常
+- M1-05：落库 + 最近 20 条上下文；`GET /api/conversations`、`GET /api/conversations/{uid}`；左侧列表真实数据、点开恢复历史、每轮结束刷新
+- 交互：`KeepAlive` 保留切页状态；切页回来固定最新；右侧对话导航（横条 + hover 列表 + 跳转高亮）
+- 实测：刷新 `/chat` 自动恢复最近会话 8 条并贴底；新对话首条消息后列表 21→22 且置顶
+- 验证：35 后端测试通过；typecheck/build 通过；doc-check 通过
 
 ## 阻塞
 

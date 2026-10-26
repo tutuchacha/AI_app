@@ -10,7 +10,7 @@
 - 接口：`POST /api/chat/stream`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 进度：M1-01~04 完成；M1-05 已完成多轮上下文与落库，会话列表/历史恢复待做
+- 进度：M1-01~05 完成（多轮上下文、落库、会话列表与历史恢复）；下一步 WS 对照与重试
 
 ## 1. 目标
 
@@ -48,6 +48,13 @@ Accept: text/event-stream
 `conversationId` 留空 → 后端生成 `c_` 前缀并落库；带已有 ID → 读取该会话最近 20 条消息作为上下文。
 
 响应头：`Cache-Control: no-cache`、`X-Accel-Buffering: no`、`Connection: keep-alive`。
+
+### 会话列表 / 历史（M1-05）
+
+`GET /api/conversations?module=chat`（列表，按最后消息倒序，≤50）与 `GET /api/conversations/{uid}`（详情，按 id 正序，仅 `DONE/STOPPED`，≤200），均需 Bearer。
+
+- 只返回当前用户的会话：别人的 403、不存在 404；时间字段为本地 ISO-8601 字符串
+- 实现：`ConversationController` → `ConversationService.listSummaries/detail`
 
 ### WebSocket（M1.5，对照）
 

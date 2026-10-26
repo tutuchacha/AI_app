@@ -38,11 +38,15 @@ const {
   send,
   stop,
   reset,
+  hydrate,
+  conversationId,
 } = useChat({
   mode: props.mode,
   personaId: props.persona?.id,
   greeting: props.greeting,
 })
+
+const emit = defineEmits<{ changed: [uid: string] }>()
 
 const model = ref('qwen-plus')
 const listRef = ref<HTMLElement>()
@@ -147,12 +151,40 @@ function jumpTo(id: string) {
 function pick(text: string) {
   if (streaming.value) return
   stickToBottom.value = true
-  void send(text, model.value)
+  void send(text, model.value).then(() => emit('changed', conversationId.value))
 }
 
 function handleSend(text: string) {
   stickToBottom.value = true
-  void send(text, model.value)
+  void send(text, model.value).then(() => emit('changed', conversationId.value))
+}
+
+/** 后端历史 → 组件消息；status 用大写存储，这里转成前端的小写 */
+function toChatMessage(row: {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  status: string
+  createdAt: string
+}) {
+  return {
+    id: String(row.id),
+    role: row.role,
+    content: row.content,
+    citations: [],
+    status: row.status === 'STOPPED' ? ('stopped' as const) : ('done' as const),
+    createdAt: Date.parse(row.createdAt) || Date.now(),
+  }
+}
+
+/** 切会话/刷新后恢复历史 */
+function loadConversation(detail: {
+  uid: string
+  messages: Parameters<typeof toChatMessage>[0][]
+}) {
+  hydrate(detail.uid, detail.messages.map(toChatMessage))
+  stickToBottom.value = true
+  nextTick(() => pinToBottom())
 }
 
 function restart() {
@@ -195,7 +227,7 @@ onActivated(() => {
   window.setTimeout(updateActive, 240)
 })
 
-defineExpose({ reset, restart, send })
+defineExpose({ reset, restart, send, loadConversation })
 </script>
 
 <template>
