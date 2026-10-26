@@ -88,6 +88,8 @@ export class WsChatTransport implements ChatTransport {
     this.socket = null
     this.opening = null
     this.stats.connected = false
+    this.stats.rounds = 0
+    this.stats.firstTokenMs = 0
     if (socket) {
       socket.onclose = null
       socket.onerror = null
