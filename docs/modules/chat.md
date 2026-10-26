@@ -10,7 +10,7 @@
 - 接口：`POST /api/chat/stream`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 进度：M1-01~05 完成（多轮上下文、落库、会话列表与历史恢复）；下一步 WS 对照与重试
+- 进度：M1-01~05 完成（多轮上下文、落库、会话列表与历史恢复）；M1-06 指标见 `observability.md`
 
 ## 1. 目标
 

@@ -18,6 +18,7 @@
 | `adr/0002-streaming-transport.md` | SSE + WebSocket 双通道 | 做 M1 流式时 | 60 |
 | `adr/0003-dashscope-provider.md` | 模型服务选百炼、模型分工、密钥管理 | 接模型 / 换厂商 | 60 |
 | `modules/chat.md` | 聊天模块：接口、事件、状态 | 做 M1 时 | 120 |
+| `modules/observability.md` | 指标定义、Prometheus/Grafana 启动、看板 | 做 M1-06 / 看监控 | 120 |
 | `progress/YYYY-MM.md` | 流水账，只追加 | 只读当月最后 3 条 | 单条 8 |
 
 ## 计划新增（用到再建，不预建空文件）

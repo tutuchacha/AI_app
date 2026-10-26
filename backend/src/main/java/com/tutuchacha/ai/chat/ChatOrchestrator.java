@@ -40,10 +40,12 @@ public class ChatOrchestrator {
 
     private final AiGateway aiGateway;
     private final ConversationService conversationService;
+    private final ChatMetrics metrics;
 
-    public ChatOrchestrator(AiGateway aiGateway, ConversationService conversationService) {
+    public ChatOrchestrator(AiGateway aiGateway, ConversationService conversationService, ChatMetrics metrics) {
         this.aiGateway = aiGateway;
         this.conversationService = conversationService;
+        this.metrics = metrics;
     }
 
     public ChatResult chat(String username, ChatRequest request) {
@@ -54,16 +56,20 @@ public class ChatOrchestrator {
                 username, request.conversationId(), request.module(), model, content, requestId);
 
         AiChatResponse response;
+        long startedAt = System.currentTimeMillis();
         try {
             response = aiGateway.complete(new AiChatRequest(model, messagesOf(context, content), null, null));
         } catch (RuntimeException ex) {
             conversationService.finish(context, new ConversationService.Finish("", 0, 0, 0, "FAILED"));
+            metrics.failed(request.module(), model, System.currentTimeMillis() - startedAt);
             throw ex;
         }
 
         conversationService.finish(context, new ConversationService.Finish(
                 response.content(), response.promptTokens(), response.completionTokens(),
                 response.latencyMs(), "DONE"));
+        metrics.done(request.module(), model, response.latencyMs(),
+                response.promptTokens(), response.completionTokens());
 
         log.info("chat user={} conversation={} model={} latencyMs={} tokens={}/{}",
                 username, context.uid(), response.model(), response.latencyMs(),
@@ -112,6 +118,8 @@ public class ChatOrchestrator {
                     long latencyMs = System.currentTimeMillis() - startedAt;
                     conversationService.finish(context, new ConversationService.Finish(
                             answer.toString(), promptTokens.get(), completionTokens.get(), latencyMs, "DONE"));
+                    metrics.done(request.module(), model, latencyMs,
+                            promptTokens.get(), completionTokens.get());
                     log.info("stream done user={} conversation={} model={} latencyMs={} tokens={}/{} finish={}",
                             username, conversationId, model, latencyMs,
                             promptTokens.get(), completionTokens.get(), finishReason.get());
@@ -120,21 +128,28 @@ public class ChatOrchestrator {
                             ChatEvent.done(finishReason.get(), latencyMs));
                 }))
                 .onErrorResume(ex -> {
+                    long latencyMs = System.currentTimeMillis() - startedAt;
                     conversationService.finish(context, new ConversationService.Finish(
                             answer.toString(), promptTokens.get(), completionTokens.get(),
-                            System.currentTimeMillis() - startedAt, "FAILED"));
+                            latencyMs, "FAILED"));
+                    metrics.failed(request.module(), model, latencyMs);
                     return Flux.just(errorOf(ex));
                 })
                 .doOnCancel(() -> {
+                    long latencyMs = System.currentTimeMillis() - startedAt;
                     conversationService.finish(context, new ConversationService.Finish(
                             answer.toString(), promptTokens.get(), completionTokens.get(),
-                            System.currentTimeMillis() - startedAt, "STOPPED"));
+                            latencyMs, "STOPPED"));
+                    metrics.stopped(request.module(), model, latencyMs,
+                            promptTokens.get(), completionTokens.get());
                     log.info("stream cancelled user={} conversation={}", username, conversationId);
                 });
 
         String messageId = context.assistantMessageId() == null
                 ? null : context.assistantMessageId().toString();
-        return Flux.just(ChatEvent.meta(conversationId, requestId, model, messageId)).concatWith(body);
+        return Flux.just(ChatEvent.meta(conversationId, requestId, model, messageId)).concatWith(body)
+                .doOnSubscribe(subscription -> metrics.streamStarted())
+                .doFinally(signal -> metrics.streamEnded());
     }
 
     /** system + 历史 + 本轮 user，历史为空时等价于单轮。 */
