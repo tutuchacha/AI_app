@@ -39,6 +39,9 @@ function greetingMessage(text: string): ChatMessage {
 export function useChat(options: UseChatOptions) {
   const transport = ref<ChatTransport>(pickTransport())
   const transportName = computed(() => transport.value.name)
+  const transportStats = computed(() =>
+    transport.value.name === 'ws' ? wsTransport.stats : null,
+  )
   const messages = ref<ChatMessage[]>(options.greeting ? [greetingMessage(options.greeting)] : [])
   const streaming = ref(false)
   const error = ref('')
@@ -166,6 +169,7 @@ export function useChat(options: UseChatOptions) {
   /** 切换传输通道：仅空闲时允许，选择记在 localStorage */
   function setTransport(kind: TransportKind) {
     if (USE_MOCK || streaming.value) return
+    if (kind === 'sse') wsTransport.close()
     transport.value = kind === 'ws' ? wsTransport : sseTransport
     localStorage.setItem(TRANSPORT_KEY, kind)
   }
@@ -194,6 +198,7 @@ export function useChat(options: UseChatOptions) {
 
   return {
     transportName,
+    transportStats,
     messages,
     streaming,
     error,

@@ -28,6 +28,7 @@ const props = withDefaults(
 
 const {
   transportName,
+  transportStats,
   messages,
   streaming,
   error,
@@ -61,7 +62,7 @@ const displaySubtitle = computed(() => {
   return transportName.value === 'sse'
       ? 'SSE 流式 · 真实模型，逐字返回'
       : transportName.value === 'ws'
-          ? 'WebSocket 流式 · 真实模型，逐字返回'
+          ? 'WebSocket 持久连接 · 一次握手多轮对话'
           : 'Mock 通道，离线验证界面与交互'
 })
 const modeLabel = computed(() => {
@@ -367,7 +368,13 @@ defineExpose({ reset, restart, send, loadConversation })
     />
 
     <div class="panel-foot">
-      <span>{{ transportName }} transport</span>
+      <span>{{ transportName === 'ws' ? 'WS 持久连接' : transportName + ' transport' }}</span>
+      <span v-if="transportStats && transportStats.handshakes">
+        握手 {{ transportStats.handshakes }} 次 · 复用 {{ transportStats.rounds }} 轮
+      </span>
+      <span v-if="transportStats && transportStats.firstTokenMs">
+        首字 {{ transportStats.firstTokenMs }}ms
+      </span>
       <span v-if="lastLatency !== null">上一条耗时 {{ (lastLatency / 1000).toFixed(2) }}s</span>
       <span v-if="lastUsage">{{ lastUsage.promptTokens }} / {{ lastUsage.completionTokens }} tokens</span>
       <span v-if="lastFinishReason === 'length'" class="warn">已达长度上限，可发「继续」</span>

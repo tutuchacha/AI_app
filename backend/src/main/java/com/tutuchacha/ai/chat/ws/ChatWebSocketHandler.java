@@ -1,5 +1,6 @@
 package com.tutuchacha.ai.chat.ws;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tutuchacha.ai.chat.ChatOrchestrator;
 import com.tutuchacha.ai.chat.dto.ChatEvent;
@@ -14,13 +15,15 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * M1-07 WS 传输：一条连接承载一轮对话，帧就是 ChatEvent JSON。
- * 客户端关闭连接即取消上游生成，和 SSE 断连语义一致（消息标 STOPPED）。
+ * M1-09 WS 持久连接：一次握手可跑多轮对话。
+ * 客户端帧：{"type":"chat"|"stop"|"ping", ...}；服务端帧：ChatEvent 或 {"type":"pong"}。
+ * stop 只取消当前轮，连接保留；连接关闭等价于 stop。
  */
 @Component
 public class ChatWebSocketHandler extends TextWebSocketHandler {
@@ -31,7 +34,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final ChatOrchestrator orchestrator;
     private final ObjectMapper objectMapper;
-    private final Map<String, Disposable> running = new ConcurrentHashMap<>();
+    private final Map<String, Active> running = new ConcurrentHashMap<>();
 
     public ChatWebSocketHandler(ChatOrchestrator orchestrator, ObjectMapper objectMapper) {
         this.orchestrator = orchestrator;
@@ -46,94 +49,138 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+        JsonNode frame;
+        try {
+            frame = objectMapper.readTree(message.getPayload());
+        } catch (Exception ex) {
+            sendError(session, "BAD_REQUEST", "请求格式不正确");
+            return;
+        }
+        // 兼容 M1-07 的旧客户端：没有 type 的帧按 chat 处理
+        String type = frame.path("type").asText("chat");
+        switch (type) {
+            case "chat" -> startRound(session, frame);
+            case "stop" -> stopRound(session);
+            case "ping" -> sendRaw(session, Map.of("type", "pong"));
+            default -> sendError(session, "BAD_REQUEST", "未知帧类型：" + type);
+        }
+    }
+
+    private void startRound(WebSocketSession session, JsonNode frame) {
+        if (running.containsKey(session.getId())) {
+            sendError(session, "BUSY", "上一轮还在生成，请稍候");
+            return;
+        }
         ChatRequest request;
         try {
-            request = objectMapper.readValue(message.getPayload(), ChatRequest.class);
+            request = objectMapper.treeToValue(frame, ChatRequest.class);
         } catch (Exception ex) {
-            reject(session, "请求格式不正确");
+            sendError(session, "BAD_REQUEST", "请求格式不正确");
             return;
         }
         if (request.content() == null || request.content().isBlank()) {
-            reject(session, "内容不能为空");
+            sendError(session, "BAD_REQUEST", "内容不能为空");
             return;
         }
         if (request.content().length() > MAX_CONTENT) {
-            reject(session, "单条消息最长 4000 字");
-            return;
-        }
-        if (running.containsKey(session.getId())) {
-            send(session, ChatEvent.error("BUSY", "上一轮还在生成，请稍候"));
+            sendError(session, "BAD_REQUEST", "单条消息最长 4000 字");
             return;
         }
 
         String username = (String) session.getAttributes().get(USERNAME);
-        reactor.core.publisher.Flux<ChatEvent> events;
+        Flux<ChatEvent> events;
         try {
             events = orchestrator.stream(username, request);
         } catch (BusinessException ex) {
             String code = ex.getErrorCode() == ErrorCode.TOO_MANY_REQUESTS ? "RATE_LIMITED" : "BAD_REQUEST";
-            send(session, ChatEvent.error(code, ex.getMessage()));
-            close(session);
+            sendError(session, code, ex.getMessage());
             return;
         }
-        Disposable subscription = events
-                .subscribe(
-                        event -> send(session, event),
-                        ex -> {
-                            log.warn("ws stream failed session={}: {}", session.getId(), ex.getMessage());
-                            send(session, ChatEvent.error("INTERNAL", "生成失败，请稍后重试"));
-                            close(session);
-                        },
-                        () -> close(session));
-        if (subscription.isDisposed()) {
-            close(session);
-        } else {
-            running.put(session.getId(), subscription);
+
+        Active active = new Active();
+        running.put(session.getId(), active);
+        try {
+            active.subscription = events.subscribe(
+                    event -> send(session, event),
+                    ex -> {
+                        log.warn("ws stream failed session={}: {}", session.getId(), ex.getMessage());
+                        running.remove(session.getId(), active);
+                        sendError(session, "INTERNAL", "生成失败，请稍后重试");
+                    },
+                    () -> running.remove(session.getId(), active));
+        } catch (RuntimeException ex) {
+            running.remove(session.getId());
+            log.warn("ws subscribe failed session={}: {}", session.getId(), ex.getMessage());
+            sendError(session, "INTERNAL", "生成失败，请稍后重试");
+        }
+    }
+
+    /** 只停当前轮：取消上游会触发 ChatOrchestrator 的 doOnCancel -> STOPPED。 */
+    private void stopRound(WebSocketSession session) {
+        Active active = running.remove(session.getId());
+        if (active != null) {
+            active.dispose();
         }
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        Disposable subscription = running.remove(session.getId());
-        if (subscription != null) {
-            // 取消上游，触发 ChatOrchestrator 的 doOnCancel -> STOPPED
-            subscription.dispose();
-        }
+        stopRound(session);
     }
 
-    private void reject(WebSocketSession session, String message) {
-        send(session, ChatEvent.error("BAD_REQUEST", message));
-        close(session);
+    private void sendError(WebSocketSession session, String code, String message) {
+        send(session, ChatEvent.error(code, message));
     }
 
     private void send(WebSocketSession session, ChatEvent event) {
         if (!session.isOpen()) {
-            cancel(session);
+            stopRound(session);
             return;
         }
         try {
-            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(event)));
+            // WebSocketSession 不是线程安全的，流式回调与 pong 可能并发
+            synchronized (session) {
+                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(event)));
+            }
         } catch (Exception ex) {
             log.debug("ws send failed session={}: {}", session.getId(), ex.getMessage());
-            cancel(session);
+            stopRound(session);
+            close(session);
         }
     }
 
-    private void cancel(WebSocketSession session) {
-        Disposable subscription = running.remove(session.getId());
-        if (subscription != null) {
-            subscription.dispose();
+    private void sendRaw(WebSocketSession session, Object payload) {
+        if (!session.isOpen()) {
+            return;
+        }
+        try {
+            synchronized (session) {
+                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(payload)));
+            }
+        } catch (Exception ex) {
+            log.debug("ws send failed session={}: {}", session.getId(), ex.getMessage());
+            close(session);
         }
     }
 
     private void close(WebSocketSession session) {
-        running.remove(session.getId());
         try {
             if (session.isOpen()) {
                 session.close(CloseStatus.NORMAL);
             }
         } catch (Exception ex) {
             log.debug("ws close failed session={}: {}", session.getId(), ex.getMessage());
+        }
+    }
+
+    private static final class Active {
+        private volatile Disposable subscription;
+
+        private void dispose() {
+            Disposable current = subscription;
+            if (current != null && !current.isDisposed()) {
+                current.dispose();
+            }
         }
     }
 }
