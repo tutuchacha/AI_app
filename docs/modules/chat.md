@@ -7,7 +7,7 @@
 
 - 目标：多轮会话、流式、停止、落库；SSE 为主，WS 为对照
 - 唯一入口：`ChatOrchestrator`；输出统一 `ChatEvent` 流
-- 接口：`POST /api/chat/stream`；事件 `meta/delta/citation/usage/done/error`
+- 接口：`POST /api/chat/stream`（SSE）、`WS /ws/chat`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
 - 进度：M1-01~05 完成（多轮上下文、落库、会话列表与历史恢复）；M1-06 指标见 `observability.md`
@@ -91,6 +91,7 @@ ws://localhost:8080/ws/chat?token=<jwt>
 - 所有事件带 `requestId`，为多路复用与重连预留。
 - `usage` 依赖 `stream_options.include_usage`（已在网关开启）；取不到时输出 0。
 - `done.finishReason`：`stop` 正常结束、`length` 达到 max-tokens（前端提示可继续）、`stopped` 客户端停止。
+- WS 帧就是上述 JSON（无 `data:` 前缀）；一条连接跑一轮，`done/error` 后服务端关闭连接。
 
 ## 5. 数据库
 
@@ -126,8 +127,8 @@ interface ChatTransport {
 ```
 
 - `SseChatTransport`：fetch + `ReadableStream` + `TextDecoder`，按 `\n\n` 切事件。
-- `WsChatTransport`：连接复用、`requestId` 匹配、心跳、指数退避重连。
-- `useChat()` 只依赖 `ChatTransport`，切换通道改配置即可。
+- `WsChatTransport`：`/ws/chat?token=JWT`，首帧发请求体；关闭连接即停止。
+- 页面头部 `SSE / WS` 切换（存 `localStorage.xy_transport`）；`useChat()` 只依赖 `ChatTransport`。
 - 渲染：`markdown-it` + `highlight.js` + `DOMPurify`；超过 200 条启用虚拟滚动。
 
 ## 8. 分步计划（每步一个 commit）
@@ -140,7 +141,7 @@ interface ChatTransport {
 | M1-04 | 前端聊天页 + SSE 解析 ✅ | 页面逐字显示、停止生效 |
 | M1-05 | 上下文落库 ✅ / 会话列表与历史恢复 ✅ / 失败重试 ✅ | 追问记得上文，刷新可恢复，重试不重复提问 |
 | M1-06 | token/时延指标 + 落库 ✅ | Grafana 有曲线 |
-| M1-07 | WebSocket 传输 + 前端切换 | 两通道结果一致 |
+| M1-07 | WebSocket 传输 + 前端切换 ✅ | 两通道结果一致 |
 | M1-08 | 错误处理、限流、超时 | 断网/超时有友好提示 |
 
 ## 9. 测试清单

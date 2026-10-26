@@ -1,10 +1,19 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { ChatMessage, ChatMode, ChatTransport, Citation, FinishReason } from '@/types/chat'
 import { mockTransport } from './mockTransport'
 import { sseTransport } from './sseTransport'
+import { wsTransport } from './wsTransport'
 
 /** VITE_USE_MOCK=true 时走本地假模型，便于离线开发 */
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
+const TRANSPORT_KEY = 'xy_transport'
+
+export type TransportKind = 'sse' | 'ws'
+
+function pickTransport(): ChatTransport {
+  if (USE_MOCK) return mockTransport
+  return localStorage.getItem(TRANSPORT_KEY) === 'ws' ? wsTransport : sseTransport
+}
 
 interface UseChatOptions {
   mode: ChatMode
@@ -28,7 +37,8 @@ function greetingMessage(text: string): ChatMessage {
 }
 
 export function useChat(options: UseChatOptions) {
-  const transport: ChatTransport = USE_MOCK ? mockTransport : sseTransport
+  const transport = ref<ChatTransport>(pickTransport())
+  const transportName = computed(() => transport.value.name)
   const messages = ref<ChatMessage[]>(options.greeting ? [greetingMessage(options.greeting)] : [])
   const streaming = ref(false)
   const error = ref('')
@@ -98,7 +108,7 @@ export function useChat(options: UseChatOptions) {
     controller = new AbortController()
 
     try {
-      await transport.send(
+      await transport.value.send(
         {
           conversationId: conversationId.value || undefined,
           content: text,
@@ -153,6 +163,13 @@ export function useChat(options: UseChatOptions) {
     controller?.abort()
   }
 
+  /** 切换传输通道：仅空闲时允许，选择记在 localStorage */
+  function setTransport(kind: TransportKind) {
+    if (USE_MOCK || streaming.value) return
+    transport.value = kind === 'ws' ? wsTransport : sseTransport
+    localStorage.setItem(TRANSPORT_KEY, kind)
+  }
+
   function reset() {
     stop()
     messages.value = options.greeting ? [greetingMessage(options.greeting)] : []
@@ -176,7 +193,7 @@ export function useChat(options: UseChatOptions) {
   }
 
   return {
-    transportName: transport.name,
+    transportName,
     messages,
     streaming,
     error,
@@ -187,6 +204,7 @@ export function useChat(options: UseChatOptions) {
     conversationId,
     send,
     retry,
+    setTransport,
     stop,
     reset,
     hydrate,

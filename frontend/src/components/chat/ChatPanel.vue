@@ -37,6 +37,7 @@ const {
   lastFinishReason,
   send,
   retry,
+  setTransport,
   stop,
   reset,
   hydrate,
@@ -57,9 +58,11 @@ const displayTitle = computed(() => props.title || props.persona?.name || '新�
 const displaySubtitle = computed(() => {
   if (props.subtitle) return props.subtitle
   if (props.persona) return `${props.persona.title} · ${props.persona.tagline}`
-  return transportName === 'sse'
+  return transportName.value === 'sse'
       ? 'SSE 流式 · 真实模型，逐字返回'
-      : 'Mock 通道，离线验证界面与交互'
+      : transportName.value === 'ws'
+          ? 'WebSocket 流式 · 真实模型，逐字返回'
+          : 'Mock 通道，离线验证界面与交互'
 })
 const modeLabel = computed(() => {
   if (props.mode === 'support') return '客服模式'
@@ -262,8 +265,24 @@ defineExpose({ reset, restart, send, loadConversation })
       <div class="tools">
         <span class="live" :class="{ on: streaming }">
           <i />
-          {{ streaming ? '生成中' : transportName === 'sse' ? '已连接' : 'Mock 通道' }}
+          {{ streaming ? '生成中' : transportName === 'mock' ? 'Mock 通道' : '已连接' }}
         </span>
+        <div v-if="transportName !== 'mock'" class="transport-switch" title="切换传输通道">
+          <button
+            :class="{ on: transportName === 'sse' }"
+            :disabled="streaming"
+            @click="setTransport('sse')"
+          >
+            SSE
+          </button>
+          <button
+            :class="{ on: transportName === 'ws' }"
+            :disabled="streaming"
+            @click="setTransport('ws')"
+          >
+            WS
+          </button>
+        </div>
         <el-select v-model="model" size="small" class="model-select" :disabled="streaming">
           <el-option label="qwen-plus" value="qwen-plus" />
           <el-option label="qwen-turbo" value="qwen-turbo" />
@@ -352,7 +371,7 @@ defineExpose({ reset, restart, send, loadConversation })
       <span v-if="lastLatency !== null">上一条耗时 {{ (lastLatency / 1000).toFixed(2) }}s</span>
       <span v-if="lastUsage">{{ lastUsage.promptTokens }} / {{ lastUsage.completionTokens }} tokens</span>
       <span v-if="lastFinishReason === 'length'" class="warn">已达长度上限，可发「继续」</span>
-      <span>{{ transportName === 'sse' ? modelName : '离线 Mock' }}</span>
+      <span>{{ transportName === 'mock' ? '离线 Mock' : modelName }}</span>
     </div>
   </section>
 </template>
@@ -466,6 +485,35 @@ defineExpose({ reset, restart, send, loadConversation })
 
 .model-select {
   width: 132px;
+}
+
+.transport-switch {
+  display: flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: #eef0f7;
+}
+
+.transport-switch button {
+  padding: 2px 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--xy-muted);
+  font-size: 10.5px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.transport-switch button.on {
+  background: #fff;
+  color: var(--xy-ink);
+  box-shadow: 0 1px 3px rgba(30, 40, 80, 0.12);
+}
+
+.transport-switch button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .messages-wrap {
