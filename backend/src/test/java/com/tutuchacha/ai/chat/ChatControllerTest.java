@@ -263,6 +263,22 @@ class ChatControllerTest {
                 .containsExactly("system", "user");
     }
 
+    @Test
+    void retryWithoutStoredQuestionInsertsItOnce() throws Exception {
+        when(aiGateway.defaultModel()).thenReturn("qwen-plus");
+        when(aiGateway.stream(any(AiChatRequest.class))).thenReturn(Flux.just(
+                new AiStreamChunk("补上了", "qwen-plus", 8, 3, "stop")));
+
+        String body = streamBody("{\"content\":\"没来得及落库的提问\",\"conversationId\":\"c_retry_orphan\","
+                + "\"module\":\"chat\",\"retry\":true}");
+
+        assertThat(body).contains("\"content\":\"补上了\"");
+        Integer userMessages = jdbc.queryForObject(
+                "select count(*) from message m join conversation c on c.id = m.conversation_id "
+                        + "where c.uid = 'c_retry_orphan' and m.role = 'user'", Integer.class);
+        assertThat(userMessages).isEqualTo(1);
+    }
+
     private String streamBody(String json) throws Exception {
         MvcResult pending = mockMvc.perform(post("/api/chat/stream")
                         .with(user("demo").roles("USER"))

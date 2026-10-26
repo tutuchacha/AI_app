@@ -80,7 +80,9 @@ public class ConversationService {
                 supersedeStoppedAnswer(conversation.getId());
             }
             List<AiMessage> history = historyOf(conversation.getId());
-            Long userMessageId = retry ? null : insertMessage(conversation.getId(), "user", content,
+            // 重试时若历史里已有这条提问就不再插；连接没建好就取消的情况会走到插入分支
+            boolean asked = retry && questionAlreadyAsked(history, content);
+            Long userMessageId = asked ? null : insertMessage(conversation.getId(), "user", content,
                     "DONE", requestId, model);
             Long assistantMessageId = insertMessage(conversation.getId(), "assistant", "",
                     "STREAMING", requestId, model);
@@ -191,6 +193,17 @@ public class ConversationService {
             return conversationMapper.selectOne(
                     Wrappers.<Conversation>lambdaQuery().eq(Conversation::getUid, uid));
         }
+    }
+
+    /** 历史里最后一条 user 是否就是本次提问（重试时用来避免重复落库）。 */
+    private boolean questionAlreadyAsked(List<AiMessage> history, String content) {
+        for (int i = history.size() - 1; i >= 0; i -= 1) {
+            AiMessage message = history.get(i);
+            if ("user".equals(message.role())) {
+                return content.equals(message.content());
+            }
+        }
+        return false;
     }
 
     /** 重试时把上一条「停止」的半截回答标成 FAILED，避免它再进上下文和历史详情。 */
