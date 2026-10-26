@@ -10,7 +10,7 @@
 - 接口：`POST /api/chat/stream`（SSE）、`WS /ws/chat`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 进度：M1-01~05 完成（多轮上下文、落库、会话列表与历史恢复）；M1-06 指标见 `observability.md`
+- 进度：M1-01~08 完成（多轮上下文、落库、会话列表与历史恢复、WS、限流与超时）；M1-06 指标见 `observability.md`
 
 ## 1. 目标
 
@@ -56,21 +56,15 @@ Accept: text/event-stream
 - 只返回当前用户的会话：别人的 403、不存在 404；时间字段为本地 ISO-8601 字符串
 - 实现：`ConversationController` → `ConversationService.listSummaries/detail`
 
-### WebSocket（M1.5，对照）
+### WebSocket（M1-07）
 
 ```
 ws://localhost:8080/ws/chat?token=<jwt>
 ```
 
-客户端帧：
-
-```json
-{ "type": "chat", "requestId": "r1", "conversationId": "c1", "content": "你好" }
-{ "type": "stop", "requestId": "r1" }
-{ "type": "ping" }
-```
-
-服务端帧：`meta / delta / citation / usage / done / error / pong`，字段与 SSE 的 `data` 一致。
+- 一条连接跑一轮：连接后客户端发一帧请求体（同 SSE 的 JSON，含 `retry`），服务端回 `ChatEvent` 帧
+- 帧无 `data:` 前缀；`done/error` 后服务端关闭连接
+- 客户端关闭连接 = 停止生成（消息标 `STOPPED`）；握手失败返回 401
 
 ## 4. 事件协议
 
@@ -117,6 +111,7 @@ IDLE → CONNECTING → STREAMING → DONE
 
 前端按钮：`STREAMING` 时“停止”替换“发送”；`FAILED` 可重试；`STOPPED` 保留半截内容。
 重试（`retry: true`）不新增 user 消息，旧半截回答标 `FAILED` 后重新生成；历史末尾已是同一提问时不再重复追加。
+保护（M1-08）：`app.chat.rate-limit-per-minute`（默认 20，0 关闭）单机固定窗口，超限 429 / `RATE_LIMITED`；`app.ai.timeout`（默认 60s）超时 504 / `LLM_TIMEOUT`；上游 429 同样映射 `TOO_MANY_REQUESTS`。
 
 ## 7. 前端
 
@@ -142,7 +137,7 @@ interface ChatTransport {
 | M1-05 | 上下文落库 ✅ / 会话列表与历史恢复 ✅ / 失败重试 ✅ | 追问记得上文，刷新可恢复，重试不重复提问 |
 | M1-06 | token/时延指标 + 落库 ✅ | Grafana 有曲线 |
 | M1-07 | WebSocket 传输 + 前端切换 ✅ | 两通道结果一致 |
-| M1-08 | 错误处理、限流、超时 | 断网/超时有友好提示 |
+| M1-08 | 错误处理、限流、超时 ✅ | 429/504 有友好提示，可重试 |
 
 ## 9. 测试清单
 
