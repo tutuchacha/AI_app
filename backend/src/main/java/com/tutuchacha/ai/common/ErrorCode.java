@@ -15,7 +15,9 @@ public enum ErrorCode {
     CONFLICT(409, "数据冲突"),
     INTERNAL_ERROR(500, "服务器开小差了"),
     BAD_GATEWAY(502, "上游模型调用失败"),
-    SERVICE_UNAVAILABLE(503, "服务暂不可用，请稍后重试");
+    SERVICE_UNAVAILABLE(503, "服务暂不可用，请稍后重试"),
+    GATEWAY_TIMEOUT(504, "模型响应超时，请稍后重试"),
+    TOO_MANY_REQUESTS(429, "请求过于频繁，请稍后再试");
 
     private final int code;
     private final String message;

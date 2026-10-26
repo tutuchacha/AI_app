@@ -4,6 +4,7 @@ import com.tutuchacha.ai.chat.dto.ChatEvent;
 import com.tutuchacha.ai.chat.dto.ChatRequest;
 import com.tutuchacha.ai.chat.dto.ChatResult;
 import com.tutuchacha.ai.common.BusinessException;
+import com.tutuchacha.ai.common.ErrorCode;
 import com.tutuchacha.ai.gateway.AiChatRequest;
 import com.tutuchacha.ai.gateway.AiChatResponse;
 import com.tutuchacha.ai.gateway.AiGateway;
@@ -41,14 +42,18 @@ public class ChatOrchestrator {
     private final AiGateway aiGateway;
     private final ConversationService conversationService;
     private final ChatMetrics metrics;
+    private final ChatRateLimiter rateLimiter;
 
-    public ChatOrchestrator(AiGateway aiGateway, ConversationService conversationService, ChatMetrics metrics) {
+    public ChatOrchestrator(AiGateway aiGateway, ConversationService conversationService,
+                            ChatMetrics metrics, ChatRateLimiter rateLimiter) {
         this.aiGateway = aiGateway;
         this.conversationService = conversationService;
         this.metrics = metrics;
+        this.rateLimiter = rateLimiter;
     }
 
     public ChatResult chat(String username, ChatRequest request) {
+        checkRate(username);
         String content = request.content().trim();
         String model = resolveModel(request);
         String requestId = newRequestId();
@@ -84,6 +89,7 @@ public class ChatOrchestrator {
      * 事件顺序：meta → delta* → usage → done；出错时为 error（已有 meta 时 meta 在前）。
      */
     public Flux<ChatEvent> stream(String username, ChatRequest request) {
+        checkRate(username);
         String content = request.content().trim();
         String model = resolveModel(request);
         String requestId = newRequestId();
@@ -193,11 +199,19 @@ public class ChatOrchestrator {
         }
     }
 
+    private void checkRate(String username) {
+        if (!rateLimiter.tryAcquire(username)) {
+            throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "请求过于频繁，请 1 分钟后再试");
+        }
+    }
+
     private ChatEvent errorOf(Throwable ex) {
         if (ex instanceof BusinessException business) {
             String code = switch (business.getErrorCode()) {
                 case SERVICE_UNAVAILABLE -> "MODEL_NOT_CONFIGURED";
                 case BAD_GATEWAY -> "MODEL_ERROR";
+                case GATEWAY_TIMEOUT -> "LLM_TIMEOUT";
+                case TOO_MANY_REQUESTS -> "RATE_LIMITED";
                 case FORBIDDEN -> "FORBIDDEN";
                 default -> "INTERNAL_ERROR";
             };

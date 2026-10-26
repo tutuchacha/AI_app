@@ -279,6 +279,18 @@ class ChatControllerTest {
         assertThat(userMessages).isEqualTo(1);
     }
 
+    @Test
+    void streamMapsTimeoutToLlmTimeoutCode() throws Exception {
+        when(aiGateway.defaultModel()).thenReturn("qwen-plus");
+        when(aiGateway.stream(any(AiChatRequest.class)))
+                .thenThrow(new BusinessException(ErrorCode.GATEWAY_TIMEOUT, "模型响应超时，请稍后重试"));
+
+        String body = streamBody("{\"content\":\"慢慢想\"}");
+
+        assertThat(body).contains("\"type\":\"error\"", "LLM_TIMEOUT", "超时");
+        assertThat(body).doesNotContain("\"type\":\"done\"");
+    }
+
     private String streamBody(String json) throws Exception {
         MvcResult pending = mockMvc.perform(post("/api/chat/stream")
                         .with(user("demo").roles("USER"))

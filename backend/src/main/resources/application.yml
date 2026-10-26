@@ -85,3 +85,8 @@ app:
     temperature: 0.7
     # 输出上限：1024 会在一半处截断，qwen-plus 支持更大；可用 AI_MAX_TOKENS 覆盖
     max-tokens: ${AI_MAX_TOKENS:4096}
+    # 单轮模型调用超时；超时返回 LLM_TIMEOUT，前端可重试
+    timeout: ${AI_TIMEOUT:60s}
+  chat:
+    # 每人每分钟最多几轮；0 关闭限流（多实例部署换 Redis，M6）
+    rate-limit-per-minute: ${CHAT_RATE_LIMIT:20}

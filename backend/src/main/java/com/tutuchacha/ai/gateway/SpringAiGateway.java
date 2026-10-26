@@ -18,8 +18,12 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.TimeoutException;
 
 /**
  * AiGateway 的 Spring AI 实现。厂商相关代码只允许出现在这个类里。
@@ -42,7 +46,15 @@ public class SpringAiGateway implements AiGateway {
         ChatModel chatModel = requireChatModel();
         long startedAt = System.currentTimeMillis();
         try {
-            ChatResponse response = chatModel.call(new Prompt(toSpringMessages(request), buildOptions(request, false)));
+            ChatResponse response = Mono.fromCallable(() ->
+                            chatModel.call(new Prompt(toSpringMessages(request), buildOptions(request, false))))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .timeout(properties.timeoutOrDefault())
+                    .onErrorMap(this::mapError)
+                    .block();
+            if (response == null) {
+                throw new BusinessException(ErrorCode.BAD_GATEWAY, "模型没有返回内容，请稍后重试");
+            }
             Usage usage = response.getMetadata().getUsage();
             return new AiChatResponse(
                     textOf(response),
@@ -53,8 +65,7 @@ public class SpringAiGateway implements AiGateway {
         } catch (BusinessException ex) {
             throw ex;
         } catch (RuntimeException ex) {
-            log.error("模型调用失败 traceId={} model={}", MDC.get("traceId"), resolveModel(request), ex);
-            throw new BusinessException(ErrorCode.BAD_GATEWAY, "模型调用失败，请稍后重试");
+            throw mapError(ex);
         }
     }
 
@@ -62,16 +73,32 @@ public class SpringAiGateway implements AiGateway {
     public Flux<AiStreamChunk> stream(AiChatRequest request) {
         ChatModel chatModel = requireChatModel();
         return chatModel.stream(new Prompt(toSpringMessages(request), buildOptions(request, true)))
+                .timeout(properties.timeoutOrDefault())
                 .map(response -> new AiStreamChunk(
                         textOf(response),
                         modelOf(response, request),
                         promptTokensOf(response),
                         completionTokensOf(response),
                         finishReasonOf(response)))
-                .onErrorMap(RuntimeException.class, ex -> {
-                    log.error("模型流式调用失败 traceId={} model={}", MDC.get("traceId"), resolveModel(request), ex);
-                    return new BusinessException(ErrorCode.BAD_GATEWAY, "模型流式调用失败，请稍后重试");
-                });
+                .onErrorMap(this::mapError);
+    }
+
+    /** 统一把超时、上游限流和普通异常翻成可展示的业务错误。 */
+    private BusinessException mapError(Throwable ex) {
+        if (ex instanceof BusinessException business) {
+            return business;
+        }
+        if (ex instanceof TimeoutException) {
+            log.warn("模型调用超时 traceId={} timeout={}", MDC.get("traceId"), properties.timeoutOrDefault());
+            return new BusinessException(ErrorCode.GATEWAY_TIMEOUT, "模型响应超时，请稍后重试");
+        }
+        String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase(Locale.ROOT);
+        if (message.contains("429") || message.contains("rate limit") || message.contains("too many requests")) {
+            log.warn("模型服务限流 traceId={}: {}", MDC.get("traceId"), ex.getMessage());
+            return new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "模型服务繁忙，请稍后重试");
+        }
+        log.error("模型调用失败 traceId={}", MDC.get("traceId"), ex);
+        return new BusinessException(ErrorCode.BAD_GATEWAY, "模型调用失败，请稍后重试");
     }
 
     @Override

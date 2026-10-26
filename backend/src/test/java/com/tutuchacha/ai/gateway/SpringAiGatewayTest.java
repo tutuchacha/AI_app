@@ -31,7 +31,7 @@ class SpringAiGatewayTest {
     private final ObjectProvider<ChatModel> provider = mock(ObjectProvider.class);
 
     private final AiProperties properties = new AiProperties(
-            "https://dashscope.aliyuncs.com/compatible-mode/v1", "test-key", "qwen-plus", 0.7, 1024);
+            "https://dashscope.aliyuncs.com/compatible-mode/v1", "test-key", "qwen-plus", 0.7, 1024, null);
 
     @Test
     void mapsRequestToSpringAiAndBack() {
@@ -75,12 +75,23 @@ class SpringAiGatewayTest {
     @Test
     void wrapsUpstreamFailureAs502() {
         when(provider.getIfAvailable()).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("429 rate limit"));
+        when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("connection reset"));
 
         assertThatThrownBy(() -> new SpringAiGateway(provider, properties)
                 .complete(AiChatRequest.of(null, "你好")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BAD_GATEWAY);
+    }
+
+    @Test
+    void mapsUpstream429ToTooManyRequests() {
+        when(provider.getIfAvailable()).thenReturn(chatModel);
+        when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("429 rate limit"));
+
+        assertThatThrownBy(() -> new SpringAiGateway(provider, properties)
+                .complete(AiChatRequest.of(null, "你好")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TOO_MANY_REQUESTS);
     }
 
     @Test

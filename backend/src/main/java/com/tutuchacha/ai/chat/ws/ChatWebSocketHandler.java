@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tutuchacha.ai.chat.ChatOrchestrator;
 import com.tutuchacha.ai.chat.dto.ChatEvent;
 import com.tutuchacha.ai.chat.dto.ChatRequest;
+import com.tutuchacha.ai.common.BusinessException;
+import com.tutuchacha.ai.common.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -65,7 +67,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
 
         String username = (String) session.getAttributes().get(USERNAME);
-        Disposable subscription = orchestrator.stream(username, request)
+        reactor.core.publisher.Flux<ChatEvent> events;
+        try {
+            events = orchestrator.stream(username, request);
+        } catch (BusinessException ex) {
+            String code = ex.getErrorCode() == ErrorCode.TOO_MANY_REQUESTS ? "RATE_LIMITED" : "BAD_REQUEST";
+            send(session, ChatEvent.error(code, ex.getMessage()));
+            close(session);
+            return;
+        }
+        Disposable subscription = events
                 .subscribe(
                         event -> send(session, event),
                         ex -> {
