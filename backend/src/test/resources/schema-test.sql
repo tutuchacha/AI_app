@@ -43,3 +43,48 @@ CREATE TABLE IF NOT EXISTS message
     created_at      TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 );
+
+CREATE TABLE IF NOT EXISTS knowledge_base
+(
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id         BIGINT       NOT NULL,
+    name            VARCHAR(64)  NOT NULL,
+    description     VARCHAR(255) NOT NULL DEFAULT '',
+    embedding_model VARCHAR(64)  NOT NULL DEFAULT 'text-embedding-v3',
+    chunk_size      INT          NOT NULL DEFAULT 800,
+    chunk_overlap   INT          NOT NULL DEFAULT 120,
+    document_count  INT          NOT NULL DEFAULT 0,
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS document
+(
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    kb_id       BIGINT       NOT NULL,
+    filename    VARCHAR(255) NOT NULL,
+    ext         VARCHAR(16)  NOT NULL DEFAULT '',
+    size        BIGINT       NOT NULL DEFAULT 0,
+    sha256      CHAR(64)     NOT NULL DEFAULT '',
+    status      VARCHAR(16)  NOT NULL DEFAULT 'PENDING',
+    chunk_count INT          NOT NULL DEFAULT 0,
+    error_msg   VARCHAR(500) NOT NULL DEFAULT '',
+    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS document_chunk
+(
+    id          BIGINT    NOT NULL AUTO_INCREMENT,
+    document_id BIGINT    NOT NULL,
+    kb_id       BIGINT    NOT NULL,
+    chunk_index INT       NOT NULL,
+    content     TEXT      NOT NULL,
+    embedding   TEXT      NULL,
+    token_count INT       NOT NULL DEFAULT 0,
+    metadata_json TEXT    NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);

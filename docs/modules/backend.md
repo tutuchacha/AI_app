@@ -7,8 +7,8 @@
 ## 0. 速览（只读这节）
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
-- 当前：M1 进行中；M1-01~04 完成，M1-05 上下文与落库已完成，下一步会话列表与历史恢复
-- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`、`V2__chat.sql`、`gateway/`、`chat/`、`SecurityConfig`、`auth/`
+- 当前：M2 进行中；M2-01 知识库 CRUD 完成，下一步文档上传与解析
+- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`~`V4__rag.sql`、`gateway/`、`chat/`、`knowledge/`、`SecurityConfig`、`auth/`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
 - 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
 
@@ -22,7 +22,8 @@ backend/src/main/java/com/tutuchacha/ai/
 ├─ auth/          # 注册、登录、JWT 过滤器
 ├─ user/          # 用户实体与 Mapper
 ├─ gateway/       # AiGateway 统一模型入口（Spring AI 只在这里出现）
-├─ chat/          # 聊天编排与接口（SSE 在 M1-03）
+├─ chat/          # 聊天编排与接口（SSE / WS）
+├─ knowledge/     # 知识库与文档（M2 RAG）
 └─ meta/          # 健康检查、版本信息（后续放模型配置）
 ```
 

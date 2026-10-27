@@ -20,6 +20,7 @@
 | `adr/0004-rate-limit-timeout.md` | 单机限流与模型调用超时 | 改限流 / 排查 429、504 | 60 |
 | `adr/0005-ws-persistent.md` | WS 改为一次握手多轮复用 | 改 WS / 对比传输 | 60 |
 | `modules/chat.md` | 聊天模块：接口、事件、状态 | 做 M1 时 | 120 |
+| `modules/rag.md` | 知识库、文档切片、检索接口与分步 | 做 M2 时 | 120 |
 | `modules/observability.md` | 指标定义、Prometheus/Grafana 启动、看板 | 做 M1-06 / 看监控 | 120 |
 | `progress/YYYY-MM.md` | 流水账，只追加 | 只读当月最后 3 条 | 单条 8 |
 
@@ -27,7 +28,6 @@
 
 | 文档 | 触发时机 |
 | --- | --- |
-| `modules/rag.md` | M2 开始 |
 | `modules/analysis.md` | M3 开始 |
 | `modules/companion.md` | M4 开始 |
 | `modules/support.md` | M4 开始 |
