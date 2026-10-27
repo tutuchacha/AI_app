@@ -7,6 +7,7 @@
 
 - 目标：知识库 → 文档上传解析 → 切片向量化 → 检索 → 聊天带 `citation` 事件
 - 当前：M2-05 完成（聊天带引用，M2 RAG 收尾）；前端知识库页与聊天选库已接真实接口
+- 下游：M3 文档分析直接读 `document_chunk` 拼正文，不重新解析文件，见 `analysis.md`
 - 代码：`knowledge/`（`KnowledgeBase*`、`Document*`、`TextChunker`、`RetrievalService`、`CosineSimilarity`）
 - 聊天接入：`ChatOrchestrator` + `ChatRequest.kbId`，事件与落库见 `chat.md` §4/§5
 - 验收：登录后建库 → 列表可见 → 改/删生效；别人的库 403、不存在 404
@@ -20,7 +21,7 @@
 | `document` | `kb_id`、`filename`、`ext`、`size`、`sha256`、`status`、`chunk_count`、`error_msg` | 状态机 `PENDING → PARSING → INDEXING → READY / FAILED` |
 | `document_chunk` | `document_id`、`kb_id`、`chunk_index`、`content`、`embedding`、`token_count`、`metadata_json` | `embedding` 为 JSON 数组（M2-03 起必有值），维度随向量模型 |
 
-- 删除链：库 → 文档 → 切片，全部走外键 `ON DELETE CASCADE`，应用层不手工清子表。
+- 删除链：库 → 文档 → 切片 / 分析记录（`document_analysis`），全部走外键 `ON DELETE CASCADE`，应用层不手工清子表。
 - 删库时 `KnowledgeBaseService.delete` 额外把 `conversation.kb_id` 置空（`conversationMapper`），避免会话指向已删库。
 - 同库去重按 `(kb_id, sha256)` 查，重复上传返回已有文档而不是再切一份。
 

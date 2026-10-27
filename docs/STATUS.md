@@ -3,15 +3,15 @@
 > 仪表盘：只写当前，≤35 行 / 1.8k 字符。历史去 progress，决策去 ADR。
 
 - 更新时间：2026-10-27
-- 阶段：**M2 RAG 收尾完成**（M2-01~05 + 前端知识库页/聊天选库）；下一步 M3
-- 数据库：Flyway `V1`~`V5 chat citation` 已执行（本机 MySQL 已迁移到 v5）
+- 阶段：**M3-01 文档分析完成**（后端三类任务 + 前端分析页 + 真库真实模型验证）；下一步 M3 收尾
+- 数据库：Flyway `V1`~`V6 document analysis` 已执行（本机 MySQL 已迁移到 v6）
 - 鉴权：BCrypt + JWT（HS256，2h）；`SecurityConfig` 放行 `ASYNC/ERROR` 与 `/ws/**`
 - 模型：百炼 `qwen-plus`；向量 `text-embedding-v3`（1024 维）；超时默认 60s
 - 远程：`git@github.com:tutuchacha/AI_app.git`
 
 ## 下一步（按顺序）
 
-1. **M3 文档分析**：摘要 / 追问 / 结构抽取（`POST /api/analysis/...`）；页面形态待用户确认
+1. **M3 收尾**：字段抽取（合同金额/期限等）是否要做，待用户确认
 2. 装 Docker 后跑 `ops/docker-compose.yml`，确认 Grafana 看板
 3. 聊天选库增强（解绑、多库同检）待用户确认后再排
 
@@ -21,9 +21,9 @@
 - M1-01~09：落库、SSE/WS（持久 + 心跳重连）、上下文、限流/超时、Prometheus 埋点
 - M1-10：容器化部署件（Dockerfile / nginx / compose）— 本机无 Docker，未实跑
 - M2-01~05：知识库 CRUD、解析切片、向量回填、检索 + 聊天接 RAG（引用事件与落库）
-- 前端：知识库页接真实接口（建库/改/删、上传轮询 `READY/FAILED`、重建、检索测试）；
-  聊天页选库透传 `kbId`，刷新恢复引用与所选库；删库自动解绑会话
-- 验证：后端 101 测试通过；浏览器真库端到端（建库→上传→READY→检索 73%→聊天引用→刷新恢复）
+- M3-01：`document_analysis` 表 + 摘要/结构/追问（异步 Worker、复用进行中任务、级联删除）；
+  分析页选库选文档、三 Tab、轮询、重试、导出 Markdown
+- 验证：后端 111 测试通过；浏览器真库三类分析全部 READY（qwen-plus，4.0s / 6.0s / 19.0s）
 
 ## 阻塞
 
@@ -34,8 +34,8 @@
 
 ```powershell
 cd D:\AI_learn\backend
-.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local   # 8080，启动即跑 Flyway
-cd ..\frontend; npm run dev                                    # 5173
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
+cd ..\frontend; npm run dev
 ```
 
-演示账号 `demo / demo1234`；提交前 `pwsh scripts/doc-check.ps1`。
+- 测试：`backend` 下 `$env:JAVA_HOME='D:\JDK21'; .\mvnw.cmd test`；前端 `npm run typecheck`

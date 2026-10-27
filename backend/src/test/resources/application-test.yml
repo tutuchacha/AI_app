@@ -23,3 +23,9 @@ app:
     max-file-size: 1MB
     async: false
     embedding-batch-size: 2
+  analysis:
+    # 同步执行，断言 READY / FAILED 结果；正文上限调小便于验证截断
+    async: false
+    max-chars: 2000
+    max-chunks: 10
+    max-tokens: 512

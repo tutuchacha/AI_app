@@ -108,3 +108,11 @@ app:
     # 检索默认返回片数与相似度下限（低于阈值的切片直接丢弃）
     top-k: ${RAG_TOP_K:6}
     min-score: ${RAG_MIN_SCORE:0.2}
+  analysis:
+    # 文档分析默认异步；测试/排障可设 false 走同步
+    async: ${ANALYSIS_ASYNC:true}
+    # 拼进提示词的正文上限与切片数上限
+    max-chars: ${ANALYSIS_MAX_CHARS:12000}
+    max-chunks: ${ANALYSIS_MAX_CHUNKS:60}
+    # 单次分析输出上限（摘要/结构/追问都不需要太长）
+    max-tokens: ${ANALYSIS_MAX_TOKENS:2000}

@@ -89,3 +89,21 @@ CREATE TABLE IF NOT EXISTS document_chunk
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 );
+
+CREATE TABLE IF NOT EXISTS document_analysis
+(
+    id                BIGINT       NOT NULL AUTO_INCREMENT,
+    document_id       BIGINT       NOT NULL,
+    kb_id             BIGINT       NOT NULL,
+    analysis_type     VARCHAR(16)  NOT NULL,
+    status            VARCHAR(16)  NOT NULL DEFAULT 'PENDING',
+    content           TEXT         NULL,
+    model             VARCHAR(64)  NOT NULL DEFAULT '',
+    prompt_tokens     INT          NOT NULL DEFAULT 0,
+    completion_tokens INT          NOT NULL DEFAULT 0,
+    latency_ms        INT          NOT NULL DEFAULT 0,
+    error_msg         VARCHAR(500) NOT NULL DEFAULT '',
+    created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);

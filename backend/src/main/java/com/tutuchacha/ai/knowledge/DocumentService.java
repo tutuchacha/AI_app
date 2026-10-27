@@ -172,7 +172,8 @@ public class DocumentService {
         return Path.of(properties.uploadDirOrDefault(), document.getId() + "." + document.getExt());
     }
 
-    private KbDocument requireOwned(String username, Long id) {
+    /** 取当前用户名下的文档：不存在 404，文档所属库不属于本人 403。M3 文档分析复用同一校验。 */
+    public KbDocument requireOwned(String username, Long id) {
         KbDocument document = documentMapper.selectById(id);
         if (document == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在");

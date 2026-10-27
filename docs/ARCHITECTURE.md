@@ -38,12 +38,12 @@ flowchart TD
 
 | 路由 | 页面 | 文件 | 现状 |
 | --- | --- | --- | --- |
-| `/login` | 登录 | `frontend/src/views/LoginView.vue` | Mock 登录（B06 接真实接口） |
+| `/login` | 登录 | `frontend/src/views/LoginView.vue` | 真实 JWT |
 | `/chat` | 对话（首页） | `frontend/src/views/ChatView.vue` | 已用 Mock 流式 |
 | `/companion` | 情绪陪伴 | `frontend/src/views/CompanionView.vue` | 角色选择 + Mock 对话 |
 | `/support` | 智能客服 | `frontend/src/views/SupportView.vue` | 界面 + Mock |
 | `/knowledge` | 知识库 | `frontend/src/views/KnowledgeView.vue` | 占位（M2） |
-| `/analysis` | 文档分析 | `frontend/src/views/AnalysisView.vue` | 占位（M3） |
+| `/analysis` | 文档分析 | `frontend/src/views/AnalysisView.vue` | M3-01 |
 | `/dashboard` | 数据面板 | `frontend/src/views/DashboardView.vue` | 占位（M5） |
 | `/settings` | 设置 | `frontend/src/views/SettingsView.vue` | 界面 |
 | `/*` | 404 | `frontend/src/views/NotFoundView.vue` | 完成 |
@@ -106,9 +106,9 @@ flowchart LR
 | `auth` | 注册、登录、JWT 过滤器 | ✅ `AuthController`、`AuthService`、`JwtService`、`JwtAuthFilter` |
 | `user` | 用户实体与 Mapper | ✅ `User`、`UserMapper` |
 | `meta` | 健康、版本、模型配置 | M1 起 |
-| `chat` 等业务包 | 各业务垂直闭环 | M1–M5 逐步新增 |
+| `analysis` | 文档分析任务与 Worker | ✅ `AnalysisController/Service/Worker` |
 
-规则：业务代码只依赖 `AiGateway`，不直接 import Spring AI 类；Controller 不写业务逻辑。
+规则：业务代码只依赖 `AiGateway`；Controller 不写业务逻辑。
 
 ## 5. 关键链路
 
