@@ -153,4 +153,21 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- 生产镜像用 -Pprod 构建：排除本机配置，避免本地密码/密钥被打进 jar -->
+        <profile>
+            <id>prod</id>
+            <build>
+                <resources>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <excludes>
+                            <exclude>application-local.yml</exclude>
+                        </excludes>
+                    </resource>
+                </resources>
+            </build>
+        </profile>
+    </profiles>
 </project>

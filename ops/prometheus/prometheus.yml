@@ -2,11 +2,13 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Docker Compose 内使用：backend 是服务名，走容器网络。
+# 本机直接跑 prometheus.exe 时用 prometheus-local.yml（抓 127.0.0.1:8080）。
 scrape_configs:
   - job_name: ai-app
     metrics_path: /actuator/prometheus
     static_configs:
       - targets:
-          - host.docker.internal:8080
+          - backend:8080
         labels:
           app: ai-app

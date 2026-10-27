@@ -1,28 +1,120 @@
-name: xingyu-ops
+name: xingyu
+
+# 常用命令（先 cd 到 ops 目录，这样 .env 与相对路径都不含糊）：
+#   cd ops
+#   首次/更新：docker compose up -d --build --force-recreate
+#   看状态：  docker compose ps
+#   看日志：  docker compose logs -f backend
+#   带监控：  docker compose --profile monitoring up -d --build
+#   停止：    docker compose down          （加 -v 会连数据库一起删，慎用）
+#
+# 变量来自同目录的 .env（从 .env.example 复制，不要提交）
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-ai_app}
+      MYSQL_USER: ${DB_USERNAME:-ai_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    logging: *default-logging
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: xingyu/backend:latest
+    restart: unless-stopped
+    environment:
+      # 覆盖 application.yml 里默认的 local，避免去找不存在的 application-local.yml
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: "jdbc:mysql://mysql:3306/${DB_NAME:-ai_app}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+      DB_USERNAME: ${DB_USERNAME:-ai_app}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      AI_BASE_URL: ${AI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
+      AI_CHAT_MODEL: ${AI_CHAT_MODEL:-qwen-plus}
+      CHAT_RATE_LIMIT: ${CHAT_RATE_LIMIT:-20}
+      AI_TIMEOUT: ${AI_TIMEOUT:-60s}
+      TZ: Asia/Shanghai
+    ports:
+      # 只绑本机，方便 curl /actuator/prometheus 排查；外网不暴露 8080
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: xingyu/web:latest
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      - backend
+    logging: *default-logging
+
+  # ---- 以下两个默认不启动，加 --profile monitoring 才跑 ----
   prometheus:
+    profiles: ["monitoring"]
     image: prom/prometheus:v2.54.1
+    restart: unless-stopped
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
     volumes:
-      - ./prometheus:/etc/prometheus:ro
+      - ./prometheus:/etc/prometheus:ro,z
+      - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
-    extra_hosts:
-      # 让容器里的 Prometheus 能访问宿主机 8080（Linux 需要；Docker Desktop 自带）
-      - "host.docker.internal:host-gateway"
+      - "${MONITOR_BIND:-127.0.0.1}:9090:9090"
+    depends_on:
+      - backend
+    logging: *default-logging
 
   grafana:
+    profiles: ["monitoring"]
     image: grafana/grafana:11.2.0
+    restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro,z
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro,z
+      - grafana-data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "${MONITOR_BIND:-127.0.0.1}:3000:3000"
     depends_on:
       - prometheus
+    logging: *default-logging
+
+volumes:
+  mysql-data:
+  prometheus-data:
+  grafana-data:
