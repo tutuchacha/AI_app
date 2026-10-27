@@ -6,8 +6,9 @@
 ## 0. 速览
 
 - 目标：知识库 → 文档上传解析 → 切片向量化 → 检索 → 聊天带 `citation` 事件
-- 当前：M2-04 完成（余弦检索 + `/search`）；下一步 M2-05 聊天接 RAG
+- 当前：M2-05 完成（聊天带引用，M2 RAG 全部收尾）；前端知识库管理页待 M3
 - 代码：`knowledge/`（`KnowledgeBase*`、`Document*`、`TextChunker`、`RetrievalService`、`CosineSimilarity`）
+- 聊天接入：`ChatOrchestrator` + `ChatRequest.kbId`，事件与落库见 `chat.md` §4/§5
 - 验收：登录后建库 → 列表可见 → 改/删生效；别人的库 403、不存在 404
 - 表：`knowledge_base` / `document` / `document_chunk`
 
@@ -46,7 +47,7 @@
 | M2-02 | 上传（pdf/docx/txt/md、≤20MB）+ 解析 + 切片落库 | ✅ |
 | M2-03 | Embedding 批量化 + `embedding` 回填 + 重建索引 | ✅ |
 | M2-04 | 检索（topK=6、相似度阈值）+ `/search` 调试接口 | ✅ |
-| M2-05 | 聊天接 RAG：拼 Prompt、`citation` 事件、前端引用展示 | ⏳ |
+| M2-05 | 聊天接 RAG：拼 Prompt、`citation` 事件、持久化与刷新恢复 | ✅ |
 
 ## 4. 约束与坑
 
@@ -62,3 +63,7 @@
 - 同库 `sha256` 去重：重复上传直接返回已有文档，不再切片；切片上限 2000 片，超出截断并告警。
 - 文件名只做展示，落盘名 `{documentId}.{ext}`（`app.rag.upload-dir`，默认 `./uploads`，已 gitignore）。
 - 删除文档显式清切片 + 删源文件，不依赖外键级联；Prompt 侧要求「只依据检索片段回答」。
+- 聊天接 RAG（M2-05）：`ChatRequest.kbId` 先校验归属再 `prepare`，避免越权请求留下脏消息；库绑定到 `conversation.kb_id`。
+- 提示词：最多 6 片、每片截 500 字拼进系统提示，要求资料不足就说「资料中没有相关信息」；引用卡片用 120 字摘要。
+- 引用持久化在 `message.citation_json`（`V5`）；检索异常只降级为无引用回答，不让聊天失败。
+- 前端引用卡片（`MessageItem.vue`）已按 `{id,title,snippet,score}` 渲染，M2-05 只补后端契约。

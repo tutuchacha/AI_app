@@ -8,7 +8,7 @@
 
 - 目标：M0 只做「能启动、能登录、能迁移」，AI 调用留到 M1
 - 当前：M2 进行中；M2-01 知识库 CRUD 完成，下一步文档上传与解析
-- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`~`V4__rag.sql`、`gateway/`、`chat/`、`knowledge/`、`SecurityConfig`、`auth/`
+- 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`~`V5__chat_citation.sql`、`gateway/`、`chat/`、`knowledge/`、`SecurityConfig`、`auth/`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
 - 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
 

@@ -9,8 +9,8 @@
 - 库：`ai_app`（utf8mb4 / utf8mb4_0900_ai_ci）
 - 账号：`ai_app`；密码只写在 `backend/src/main/resources/application-local.yml`（gitignored）
 - 迁移：`backend/src/main/resources/db/migration/`，启动时自动执行
-- 当前表：`sys_user`、`conversation`、`message`、`flyway_schema_history`
-- 已执行版本：`V1 init`、`V2 chat`
+- 当前表：`sys_user`、`conversation`、`message`、`knowledge_base`、`document`、`document_chunk`、`flyway_schema_history`
+- 已执行版本：`V1 init` ~ `V5 chat citation`
 - 其他项目的 `3307/pinliao` 与本项目无关，不要动
 
 ## 1. 表关系
@@ -42,7 +42,7 @@ erDiagram
     }
 ```
 
-M2 起加 `knowledge_doc`（文档）、`knowledge_chunk`（切片）；M4 起加角色卡与记忆表。
+M2 起加 `knowledge_base`（知识库）、`document`（文档）、`document_chunk`（切片）；M4 起加角色卡与记忆表。
 
 ## 2. sys_user（用户表）
 
@@ -76,7 +76,7 @@ M2 起加 `knowledge_doc`（文档）、`knowledge_chunk`（切片）；M4 起�
 
 索引：`idx_conv_user_module(user_id, module, last_message_at)`，按用户+模块倒序列会话；`uk_conv_uid(uid)` 保证对外 ID 唯一。
 
-## 4. message（消息表，V2）
+## 4. message（消息表，V2 + V5）
 
 | 字段 | 类型 | 允许空 | 默认/键 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -90,6 +90,7 @@ M2 起加 `knowledge_doc`（文档）、`knowledge_chunk`（切片）；M4 起�
 | model | varchar(64) | 否 | 默认 `''` | 实际模型名，如 `qwen-plus` |
 | status | varchar(16) | 否 | 默认 `DONE` | `STREAMING` / `DONE` / `STOPPED` / `FAILED` |
 | request_id | varchar(64) | 是 | — | 本次生成请求 ID，关联日志与重试 |
+| citation_json | mediumtext | 是 | — | 引用片段 JSON 数组（V5），无引用为空 |
 | created_at | datetime | 否 | 默认当前时间 | 创建时间 |
 
 索引：`idx_msg_conv(conversation_id, id)`，顺序取会话消息。

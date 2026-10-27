@@ -33,5 +33,8 @@ public class Message {
 
     private String requestId;
 
+    /** 引用的知识库片段（JSON 数组），无引用时为空。 */
+    private String citationJson;
+
     private LocalDateTime createdAt;
 }

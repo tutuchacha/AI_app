@@ -3,6 +3,7 @@ package com.tutuchacha.ai.chat;
 import com.tutuchacha.ai.chat.dto.ChatEvent;
 import com.tutuchacha.ai.chat.dto.ChatRequest;
 import com.tutuchacha.ai.chat.dto.ChatResult;
+import com.tutuchacha.ai.chat.dto.Citation;
 import com.tutuchacha.ai.common.BusinessException;
 import com.tutuchacha.ai.common.ErrorCode;
 import com.tutuchacha.ai.gateway.AiChatRequest;
@@ -10,6 +11,10 @@ import com.tutuchacha.ai.gateway.AiChatResponse;
 import com.tutuchacha.ai.gateway.AiGateway;
 import com.tutuchacha.ai.gateway.AiMessage;
 import com.tutuchacha.ai.gateway.AiStreamChunk;
+import com.tutuchacha.ai.knowledge.KnowledgeBaseService;
+import com.tutuchacha.ai.knowledge.RetrievalService;
+import com.tutuchacha.ai.knowledge.dto.SearchHit;
+import com.tutuchacha.ai.knowledge.dto.SearchRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -39,17 +44,38 @@ public class ChatOrchestrator {
             结合上文理解用户的追问，不要重复询问已经说过的信息。
             """;
 
+    /** 带知识库资料的系统提示：只依据资料回答，资料不足就明说。 */
+    static final String RAG_SYSTEM_PROMPT = """
+            你是「星屿 AI」的助手，风格温和、简洁。
+            请严格依据下面给出的「参考资料」回答用户问题，不要用资料之外的信息补充事实。
+            资料里没有答案时，直接说明「资料中没有相关信息」，不要编造。
+            默认使用简体中文回答，并保持与资料内容一致。
+            结合上文理解用户的追问，不要重复询问已经说过的信息。
+
+            参考资料：
+            %s
+            """;
+
+    private static final int MAX_PROMPT_SNIPPET = 500;
+    private static final int MAX_CITATION_SNIPPET = 120;
+
     private final AiGateway aiGateway;
     private final ConversationService conversationService;
     private final ChatMetrics metrics;
     private final ChatRateLimiter rateLimiter;
+    private final KnowledgeBaseService knowledgeBaseService;
+    private final RetrievalService retrievalService;
 
     public ChatOrchestrator(AiGateway aiGateway, ConversationService conversationService,
-                            ChatMetrics metrics, ChatRateLimiter rateLimiter) {
+                            ChatMetrics metrics, ChatRateLimiter rateLimiter,
+                            KnowledgeBaseService knowledgeBaseService,
+                            RetrievalService retrievalService) {
         this.aiGateway = aiGateway;
         this.conversationService = conversationService;
         this.metrics = metrics;
         this.rateLimiter = rateLimiter;
+        this.knowledgeBaseService = knowledgeBaseService;
+        this.retrievalService = retrievalService;
     }
 
     public ChatResult chat(String username, ChatRequest request) {
@@ -58,35 +84,41 @@ public class ChatOrchestrator {
         String model = resolveModel(request);
         String requestId = newRequestId();
         boolean retry = Boolean.TRUE.equals(request.retry());
+        Long kbId = requireKb(username, request.kbId());
+
         ConversationService.Context context = conversationService.prepare(
-                username, request.conversationId(), request.module(), model, content, requestId, retry);
+                username, request.conversationId(), request.module(), model, content, requestId, retry, kbId);
+        RagContext rag = retrieveContext(username, context.kbId(), content, request.module());
+        List<Citation> citations = rag.citations();
 
         AiChatResponse response;
         long startedAt = System.currentTimeMillis();
         try {
-            response = aiGateway.complete(new AiChatRequest(model, messagesOf(context, content, retry), null, null));
+            response = aiGateway.complete(new AiChatRequest(
+                    model, messagesOf(context, content, retry, rag), null, null));
         } catch (RuntimeException ex) {
-            conversationService.finish(context, new ConversationService.Finish("", 0, 0, 0, "FAILED"));
+            conversationService.finish(context, new ConversationService.Finish(
+                    "", 0, 0, 0, "FAILED", citations));
             metrics.failed(request.module(), model, System.currentTimeMillis() - startedAt);
             throw ex;
         }
 
         conversationService.finish(context, new ConversationService.Finish(
                 response.content(), response.promptTokens(), response.completionTokens(),
-                response.latencyMs(), "DONE"));
+                response.latencyMs(), "DONE", citations));
         metrics.done(request.module(), model, response.latencyMs(),
                 response.promptTokens(), response.completionTokens());
 
-        log.info("chat user={} conversation={} model={} latencyMs={} tokens={}/{}",
-                username, context.uid(), response.model(), response.latencyMs(),
-                response.promptTokens(), response.completionTokens());
+        log.info("chat user={} conversation={} model={} kb={} citations={} latencyMs={} tokens={}/{}",
+                username, context.uid(), response.model(), context.kbId(), citations.size(),
+                response.latencyMs(), response.promptTokens(), response.completionTokens());
 
         return new ChatResult(context.uid(), response.content(), response.model(),
-                response.promptTokens(), response.completionTokens(), response.latencyMs());
+                response.promptTokens(), response.completionTokens(), response.latencyMs(), citations);
     }
 
     /**
-     * 事件顺序：meta → delta* → usage → done；出错时为 error（已有 meta 时 meta 在前）。
+     * 事件顺序：meta → citation* → delta* → usage → done；出错时为 error（已有 meta 时 meta 在前）。
      */
     public Flux<ChatEvent> stream(String username, ChatRequest request) {
         checkRate(username);
@@ -98,14 +130,22 @@ public class ChatOrchestrator {
 
         ConversationService.Context context;
         try {
+            // 显式指定的库先校验归属，避免先落库再报 403/404 留下脏消息
+            Long kbId = requireKb(username, request.kbId());
             context = conversationService.prepare(
-                    username, request.conversationId(), request.module(), model, content, requestId, retry);
+                    username, request.conversationId(), request.module(), model, content,
+                    requestId, retry, kbId);
         } catch (BusinessException ex) {
             return Flux.just(errorOf(ex));
         }
 
+        RagContext rag = retrieveContext(username, context.kbId(), content, request.module());
+        List<Citation> citations = rag.citations();
+        Flux<ChatEvent> citationEvents = Flux.fromIterable(citations).map(ChatEvent::citation);
+
         String conversationId = context.uid();
-        AiChatRequest aiRequest = new AiChatRequest(model, messagesOf(context, content, retry), null, null);
+        AiChatRequest aiRequest = new AiChatRequest(
+                model, messagesOf(context, content, retry, rag), null, null);
         AtomicInteger promptTokens = new AtomicInteger();
         AtomicInteger completionTokens = new AtomicInteger();
         AtomicReference<String> finishReason = new AtomicReference<>("stop");
@@ -125,11 +165,12 @@ public class ChatOrchestrator {
                 .concatWith(Flux.defer(() -> {
                     long latencyMs = System.currentTimeMillis() - startedAt;
                     conversationService.finish(context, new ConversationService.Finish(
-                            answer.toString(), promptTokens.get(), completionTokens.get(), latencyMs, "DONE"));
+                            answer.toString(), promptTokens.get(), completionTokens.get(), latencyMs,
+                            "DONE", citations));
                     metrics.done(request.module(), model, latencyMs,
                             promptTokens.get(), completionTokens.get());
-                    log.info("stream done user={} conversation={} model={} latencyMs={} tokens={}/{} finish={}",
-                            username, conversationId, model, latencyMs,
+                    log.info("stream done user={} conversation={} model={} kb={} citations={} latencyMs={} tokens={}/{} finish={}",
+                            username, conversationId, model, context.kbId(), citations.size(), latencyMs,
                             promptTokens.get(), completionTokens.get(), finishReason.get());
                     return Flux.just(
                             ChatEvent.usage(promptTokens.get(), completionTokens.get()),
@@ -139,7 +180,7 @@ public class ChatOrchestrator {
                     long latencyMs = System.currentTimeMillis() - startedAt;
                     conversationService.finish(context, new ConversationService.Finish(
                             answer.toString(), promptTokens.get(), completionTokens.get(),
-                            latencyMs, "FAILED"));
+                            latencyMs, "FAILED", citations));
                     metrics.failed(request.module(), model, latencyMs);
                     return Flux.just(errorOf(ex));
                 })
@@ -147,7 +188,7 @@ public class ChatOrchestrator {
                     long latencyMs = System.currentTimeMillis() - startedAt;
                     conversationService.finish(context, new ConversationService.Finish(
                             answer.toString(), promptTokens.get(), completionTokens.get(),
-                            latencyMs, "STOPPED"));
+                            latencyMs, "STOPPED", citations));
                     metrics.stopped(request.module(), model, latencyMs,
                             promptTokens.get(), completionTokens.get());
                     log.info("stream cancelled user={} conversation={}", username, conversationId);
@@ -155,15 +196,19 @@ public class ChatOrchestrator {
 
         String messageId = context.assistantMessageId() == null
                 ? null : context.assistantMessageId().toString();
-        return Flux.just(ChatEvent.meta(conversationId, requestId, model, messageId)).concatWith(body)
+        return Flux.just(ChatEvent.meta(conversationId, requestId, model, messageId))
+                .concatWith(citationEvents)
+                .concatWith(body)
                 .doOnSubscribe(subscription -> metrics.streamStarted())
                 .doFinally(signal -> metrics.streamEnded());
     }
 
     /** system + 历史 + 本轮 user；重试时若历史末尾已是同一条提问，就不再重复追加。 */
-    private List<AiMessage> messagesOf(ConversationService.Context context, String content, boolean retry) {
+    private List<AiMessage> messagesOf(ConversationService.Context context, String content,
+                                       boolean retry, RagContext rag) {
         List<AiMessage> messages = new ArrayList<>();
-        messages.add(AiMessage.system(SYSTEM_PROMPT));
+        messages.add(AiMessage.system(rag.prompt().isEmpty() ? SYSTEM_PROMPT
+                : RAG_SYSTEM_PROMPT.formatted(rag.prompt())));
         messages.addAll(context.history());
         boolean alreadyAsked = retry && !context.history().isEmpty()
                 && "user".equals(lastRole(context.history()))
@@ -172,6 +217,63 @@ public class ChatOrchestrator {
             messages.add(AiMessage.user(content));
         }
         return messages;
+    }
+
+    /**
+     * 检索当前库的片段：显式传入的库已在前面校验过归属；
+     * 检索或向量服务异常时降级为无引用回答，不阻断聊天。
+     */
+    private RagContext retrieveContext(String username, Long kbId, String query, String module) {
+        if (kbId == null) {
+            return RagContext.EMPTY;
+        }
+        try {
+            List<SearchHit> hits = retrievalService.search(username, kbId,
+                    new SearchRequest(query, null, null));
+            if (hits.isEmpty()) {
+                return RagContext.EMPTY;
+            }
+            List<Citation> citations = hits.stream().map(this::toCitation).toList();
+            StringBuilder materials = new StringBuilder();
+            for (int i = 0; i < hits.size(); i += 1) {
+                SearchHit hit = hits.get(i);
+                materials.append('[').append(i + 1).append("] ")
+                        .append(hit.filename() == null ? "" : hit.filename()).append('\n')
+                        .append(truncate(hit.content(), MAX_PROMPT_SNIPPET)).append("\n\n");
+            }
+            return new RagContext(citations, materials.toString().trim());
+        } catch (RuntimeException ex) {
+            log.warn("RAG 检索降级 user={} kb={} module={}: {}", username, kbId, module, ex.getMessage());
+            return RagContext.EMPTY;
+        }
+    }
+
+    private Citation toCitation(SearchHit hit) {
+        double score = hit.score() == null ? 0d : Math.round(hit.score() * 10000d) / 10000d;
+        return new Citation(String.valueOf(hit.chunkId()),
+                hit.filename() == null ? "" : hit.filename(),
+                truncate(hit.content(), MAX_CITATION_SNIPPET), score);
+    }
+
+    private String truncate(String text, int max) {
+        if (text == null) {
+            return "";
+        }
+        String normalized = text.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= max ? normalized : normalized.substring(0, max) + "…";
+    }
+
+    private Long requireKb(String username, Long kbId) {
+        if (kbId == null) {
+            return null;
+        }
+        return knowledgeBaseService.requireOwned(username, kbId).getId();
+    }
+
+    /** 本轮检索结果：事件/落库用 citations，提示词用 prompt（可为空表示无资料）。 */
+    private record RagContext(List<Citation> citations, String prompt) {
+
+        private static final RagContext EMPTY = new RagContext(List.of(), "");
     }
 
     private String lastRole(List<AiMessage> history) {
@@ -213,6 +315,7 @@ public class ChatOrchestrator {
                 case GATEWAY_TIMEOUT -> "LLM_TIMEOUT";
                 case TOO_MANY_REQUESTS -> "RATE_LIMITED";
                 case FORBIDDEN -> "FORBIDDEN";
+                case NOT_FOUND -> "KB_NOT_FOUND";
                 default -> "INTERNAL_ERROR";
             };
             return ChatEvent.error(code, business.getMessage());

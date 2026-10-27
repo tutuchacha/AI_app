@@ -2,6 +2,7 @@ package com.tutuchacha.ai.chat.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 @Schema(description = "非流式聊天请求")
@@ -24,6 +25,10 @@ public record ChatRequest(
         String model,
 
         @Schema(description = "重试失败的一轮：不再插入新的 user 消息，直接重新生成", example = "false")
-        Boolean retry
+        Boolean retry,
+
+        @Schema(description = "知识库 ID，带上则检索片段注入提示词并返回 citation", example = "12")
+        @Positive(message = "知识库 ID 必须为正数")
+        Long kbId
 ) {
 }

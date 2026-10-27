@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS message
     model           VARCHAR(64) NOT NULL DEFAULT '',
     status          VARCHAR(16) NOT NULL DEFAULT 'DONE',
     request_id      VARCHAR(64) NULL,
+    citation_json   TEXT        NULL,
     created_at      TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 );

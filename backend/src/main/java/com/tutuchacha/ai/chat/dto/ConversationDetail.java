@@ -30,6 +30,7 @@ public record ConversationDetail(
             @Schema(description = "输出 token") Integer tokensOut,
             @Schema(description = "耗时毫秒") Integer latencyMs,
             @Schema(description = "模型名") String model,
+            @Schema(description = "引用的知识库片段（刷新后恢复）") List<Citation> citations,
             @Schema(description = "创建时间（ISO-8601）") String createdAt
     ) {
     }

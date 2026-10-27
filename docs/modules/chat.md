@@ -3,21 +3,19 @@
 > 只描述聊天与流式传输。RAG 见 `rag.md`（M2），角色卡见 `companion.md`（M4）。
 > 决策背景见 `../adr/0002-streaming-transport.md`。
 
-## 0. 速览（做 M1 只读这节）
+## 0. 速览
 
 - 目标：多轮会话、流式、停止、落库；SSE 为主，WS 为对照
 - 唯一入口：`ChatOrchestrator`；输出统一 `ChatEvent` 流
 - 接口：`POST /api/chat/stream`（SSE）、`WS /ws/chat`；事件 `meta/delta/citation/usage/done/error`
 - 关键类：`ChatOrchestrator`、`ChatTransport`、`SseTransport`、`WsTransport`
 - 验收：前端停止能中断后端；SSE 与 WS 输出一致
-- 进度：M1-01~09 完成（多轮上下文、落库、会话列表与历史恢复、WS 持久连接、限流与超时）；M1-06 指标见 `observability.md`
+- 进度：M1-01~09 完成（上下文、落库、历史恢复、WS 持久连接、限流与超时）；M2-05 接入知识库引用；指标见 `observability.md`
 
 ## 1. 目标
 
-- 多轮会话、流式输出、停止生成、重新生成。
-- 同一套业务逻辑支持 SSE 与 WebSocket 两种传输。
-- 会话与消息落 MySQL，刷新页面可恢复。
-- 记录 token、时延、错误，供 Grafana 展示。
+- 多轮会话、流式输出、停止与重试；同一套逻辑支持 SSE 与 WS。
+- 会话与消息落 MySQL，刷新可恢复；token/时延/错误进 Grafana。
 
 ## 2. 分层
 
@@ -28,9 +26,8 @@ Controller/Handler → ChatOrchestrator → AiGateway → Spring AI ChatModel
                           └─ UsageRecorder（指标）
 ```
 
-- `ChatOrchestrator` 是唯一业务入口，入参是统一的 `ChatCommand`。
-- 输出统一为 `ChatEvent` 流（`meta/delta/citation/usage/done/error`）。
-- 传输层只负责把 `ChatEvent` 编码成 SSE 或 WS 帧，以及处理连接生命周期。
+- `ChatOrchestrator` 是唯一业务入口，输出 `ChatEvent` 流；传输层只负责编码与连接生命周期。
+- RAG 检索发生在拼提示词前：`ConversationService` 落库、`RetrievalService` 取片段、`UsageRecorder` 记指标。
 
 ## 3. 接口
 
@@ -40,12 +37,12 @@ Controller/Handler → ChatOrchestrator → AiGateway → Spring AI ChatModel
 POST /api/chat/stream
 Authorization: Bearer <jwt>
 Content-Type: application/json
-Accept: text/event-stream
 
-{ "conversationId": "c_8f3a2b1c9d0e", "content": "你好", "module": "chat", "model": "qwen-plus" }
+{ "conversationId": "c_8f3a2b1c9d0e", "content": "你好", "module": "chat", "model": "qwen-plus", "kbId": 12 }
 ```
 
 `conversationId` 留空 → 后端生成 `c_` 前缀并落库；带已有 ID → 读取该会话最近 20 条消息作为上下文。
+`kbId` 可选：先校验库归属再落库，命中片段拼进系统提示词（只依据资料回答）；库会绑定到会话，后续轮次不传也生效。
 
 响应头：`Cache-Control: no-cache`、`X-Accel-Buffering: no`、`Connection: keep-alive`。
 
@@ -66,14 +63,14 @@ ws://localhost:8080/ws/chat?token=<jwt>
 - 客户端帧：`{"type":"chat","content":...,"module":...}`、`{"type":"stop"}`、`{"type":"ping"}`
 - 服务端帧：`ChatEvent`（同 SSE）或 `{"type":"pong"}`；`stop` 只取消当前轮（消息标 `STOPPED`）
 - 客户端每 20s ping，45s 无 pong 视为假死；断线后下次发送自动重连
-- 握手失败返回 401；页脚显示「握手 N 次 / 复用 N 轮 / 首字 Xms」
+- 握手失败 401；页脚显示「握手 N 次 / 复用 N 轮 / 首字 Xms」
 
 ## 4. 事件协议
 
 ```json
 { "type": "meta",  "conversationId": "c1", "messageId": "m1", "model": "qwen2.5:7b" }
+{ "type": "citation", "citation": { "id": "9", "title": "手册.pdf", "snippet": "年假…", "score": 0.83 } }
 { "type": "delta", "content": "你" }
-{ "type": "citation", "documentId": "d1", "chunkId": "k9", "score": 0.83, "title": "手册.pdf" }
 { "type": "usage", "promptTokens": 820, "completionTokens": 96 }
 { "type": "done",  "finishReason": "stop", "latencyMs": 1530 }
 { "type": "error", "code": "LLM_TIMEOUT", "message": "模型超时，请重试" }
@@ -82,10 +79,11 @@ ws://localhost:8080/ws/chat?token=<jwt>
 规则：
 
 - `meta` 必须第一个发；`done/error` 必须最后一个发，且只发一次。
+- 引用随 assistant 消息写入 `message.citation_json`，刷新后由会话详情还原。
+- `citation` 在 `delta` 前批量发送，一条一帧；`snippet` ≤120 字，`id` 为切片 ID。
 - `delta` 允许为空但不要高频空帧；服务端按 20–50ms 或按 token 批量 flush。
 - 客户端断开/发 `stop` → 取消上游 Flux，已生成内容照常落库。
-- 所有事件带 `requestId`，为多路复用与重连预留。
-- `usage` 依赖 `stream_options.include_usage`（已在网关开启）；取不到时输出 0。
+- `usage` 依赖 `stream_options.include_usage`（网关已开）；取不到时输出 0。
 - `done.finishReason`：`stop` 正常结束、`length` 达到 max-tokens（前端提示可继续）、`stopped` 客户端停止。
 - WS 帧就是上述 JSON（无 `data:` 前缀）；一条连接跑一轮，`done/error` 后服务端关闭连接。
 
@@ -93,15 +91,13 @@ ws://localhost:8080/ws/chat?token=<jwt>
 
 ```sql
 conversation(id, uid, user_id, module, persona_id, kb_id, title, model_id, last_message_at, created_at)
-message(id, conversation_id, role, content, tokens_in, tokens_out, latency_ms, model, status, created_at)
+message(id, conversation_id, role, content, tokens_in, tokens_out, latency_ms, model, status, request_id, citation_json, created_at)
 ```
 
-- `conversation.uid`：对外 ID（`c_` 前缀），主键为 BIGINT（`V3`）。
-- `message.status`：`STREAMING / DONE / STOPPED / FAILED`。
+- `conversation.uid`：对外 ID（`c_` 前缀），主键为 BIGINT（`V3`）；`kb_id` 为会话绑定的知识库（M2-05）。
+- `message.status`：`STREAMING / DONE / STOPPED / FAILED`；`citation_json` 为引用数组（`V5`）。
 - `V2__chat.sql` 已执行；`request_id` 用于重试与日志关联。
-- 会话标题：首条用户消息截断 30 字；可手动重命名。
-- 多轮上下文：每轮取最近 20 条 `DONE/STOPPED` 消息拼进提示词（M1-05）。
-- 短期记忆：最近 20 条或 4k token，超出截断；M4 再加长期记忆表。
+- 会话标题取首条用户消息前 30 字；每轮取最近 20 条 `DONE/STOPPED` 消息做上下文（M1-05）。
 
 ## 6. 状态机
 
@@ -112,8 +108,9 @@ IDLE → CONNECTING → STREAMING → DONE
 ```
 
 前端按钮：`STREAMING` 时“停止”替换“发送”；`FAILED` 可重试；`STOPPED` 保留半截内容。
-重试（`retry: true`）不新增 user 消息，旧半截回答标 `FAILED` 后重新生成；历史末尾已是同一提问时不再重复追加。
-保护（M1-08）：`app.chat.rate-limit-per-minute`（默认 20，0 关闭）单机固定窗口，超限 429 / `RATE_LIMITED`；`app.ai.timeout`（默认 60s）超时 504 / `LLM_TIMEOUT`；上游 429 同样映射 `TOO_MANY_REQUESTS`。
+重试（`retry: true`）不新增 user 消息，旧半截回答标 `FAILED` 后重新生成。
+保护（M1-08）：单机每分钟 20 轮（`app.chat.rate-limit-per-minute`，0 关闭）超限 429；`app.ai.timeout` 默认 60s 超时 504。
+RAG（M2-05）：`kbId` 归属在落库前校验（`FORBIDDEN` / `KB_NOT_FOUND`）；检索异常降级为普通回答。
 
 ## 7. 前端
 
@@ -123,12 +120,11 @@ interface ChatTransport {
 }
 ```
 
-- `SseChatTransport`：fetch + `ReadableStream` + `TextDecoder`，按 `\n\n` 切事件。
-- `WsChatTransport`：持久连接 `/ws/chat?token=JWT`；`chat/stop/ping` 帧，断线自动重连；页脚统计握手/复用/首字耗时。
-- 页面头部 `SSE / WS` 切换（存 `localStorage.xy_transport`）；`useChat()` 只依赖 `ChatTransport`。
-- 渲染：`markdown-it` + `highlight.js` + `DOMPurify`；超过 200 条启用虚拟滚动。
+- `SseChatTransport`：fetch + `ReadableStream` + `TextDecoder`，按 `\n\n` 切事件；`useChat()` 只依赖 `ChatTransport`。
+- `WsChatTransport`：持久连接，`chat/stop/ping` 帧，断线自动重连；页脚统计握手/复用/首字耗时。
+- 页面头部 `SSE / WS` 切换；渲染走 `markdown-it` + `DOMPurify`，>200 条虚拟滚动。
 
-## 8. 分步计划（每步一个 commit）
+## 8. 分步计划
 
 | 步骤 | 内容 | 验证 |
 | --- | --- | --- |
@@ -141,16 +137,13 @@ interface ChatTransport {
 | M1-07 | WebSocket 传输 + 前端切换 ✅ | 两通道结果一致 |
 | M1-08 | 错误处理、限流、超时 ✅ | 429/504 有友好提示，可重试 |
 | M1-09 | WS 持久连接 + 心跳/重连 ✅ | 一次握手多轮，stop 不断连 |
+| M2-05 | 聊天接 RAG：检索片段拼 Prompt + `citation` 事件与落库 ✅ | 带 `kbId` 提问有引用，刷新可恢复 |
 
 ## 9. 测试清单
 
-- [ ] 客户端中途断开，消息标记 `STOPPED`，无孤儿线程
-- [ ] 模型 429/超时 → `error` 事件 + 可重试
-- [ ] SSE 经 Nginx 不缓冲（`proxy_buffering off`）
-- [ ] WS 断线重连后历史不丢
+- [ ] 中途断开标 `STOPPED` 无孤儿线程；429/超时返回 `error` 可重试
+- [ ] SSE 经 Nginx 不缓冲；WS 断线重连后历史不丢
 
 ## 10. 暂不做
 
-- 多模态（图片/语音）：M4 之后。
-- 工具调用/Agent：M2 之后按需。
-- 消息编辑、分支对话：M3 之后。
+- 多模态（图片/语音）M4 之后；工具调用/Agent、消息编辑与分支对话按需再排。

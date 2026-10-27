@@ -1,8 +1,11 @@
 package com.tutuchacha.ai.chat;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tutuchacha.ai.common.BusinessException;
 import com.tutuchacha.ai.common.ErrorCode;
+import com.tutuchacha.ai.chat.dto.Citation;
 import com.tutuchacha.ai.chat.dto.ConversationDetail;
 import com.tutuchacha.ai.chat.dto.ConversationSummary;
 import com.tutuchacha.ai.gateway.AiMessage;
@@ -41,41 +44,46 @@ public class ConversationService {
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final UserMapper userMapper;
+    private final ObjectMapper objectMapper;
 
     public ConversationService(ConversationMapper conversationMapper,
                                MessageMapper messageMapper,
-                               UserMapper userMapper) {
+                               UserMapper userMapper,
+                               ObjectMapper objectMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.userMapper = userMapper;
+        this.objectMapper = objectMapper;
     }
 
-    /** 本轮上下文：对外 uid、历史消息、刚插入的两条消息 id。 */
-    public record Context(Long conversationId, String uid, List<AiMessage> history,
+    /** 本轮上下文：对外 uid、生效的知识库、历史消息、刚插入的两条消息 id。 */
+    public record Context(Long conversationId, String uid, Long kbId, List<AiMessage> history,
                           Long userMessageId, Long assistantMessageId) {
     }
 
     /** 本轮结果，用于回填 assistant 消息。 */
-    public record Finish(String content, int promptTokens, int completionTokens, long latencyMs, String status) {
+    public record Finish(String content, int promptTokens, int completionTokens, long latencyMs,
+                         String status, List<Citation> citations) {
     }
 
     /**
      * 取历史并写入本轮 user 消息与 assistant 占位行。
      * conversationId 不存在时按传入 uid 新建；uid 属于其他用户则 403。
      * retry=true 表示重试上一轮失败的回答：不再插入 user 消息，只补一条 assistant 占位行。
+     * kbId 非空时绑定到会话；留空沿用会话已有的知识库。
      */
     @Transactional
     public Context prepare(String username, String uid, String module, String model,
-                           String content, String requestId, boolean retry) {
+                           String content, String requestId, boolean retry, Long kbId) {
         String conversationUid = StringUtils.hasText(uid) ? uid : newUid();
         try {
             User user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getUsername, username));
             if (user == null) {
                 log.warn("skip persistence: user not found username={}", username);
-                return new Context(null, conversationUid, List.of(), null, null);
+                return new Context(null, conversationUid, kbId, List.of(), null, null);
             }
 
-            Conversation conversation = findOrCreate(conversationUid, user.getId(), module, content);
+            Conversation conversation = findOrCreate(conversationUid, user.getId(), module, content, kbId);
             if (retry) {
                 supersedeStoppedAnswer(conversation.getId());
             }
@@ -86,10 +94,12 @@ public class ConversationService {
                     "DONE", requestId, model);
             Long assistantMessageId = insertMessage(conversation.getId(), "assistant", "",
                     "STREAMING", requestId, model);
-            return new Context(conversation.getId(), conversationUid, history, userMessageId, assistantMessageId);
+            Long effectiveKbId = kbId == null ? conversation.getKbId() : kbId;
+            return new Context(conversation.getId(), conversationUid, effectiveKbId,
+                    history, userMessageId, assistantMessageId);
         } catch (DataAccessException ex) {
             log.warn("persistence unavailable, continue without memory: {}", ex.getMessage());
-            return new Context(null, conversationUid, List.of(), null, null);
+            return new Context(null, conversationUid, kbId, List.of(), null, null);
         }
     }
 
@@ -107,6 +117,7 @@ public class ConversationService {
             message.setTokensOut(result.completionTokens());
             message.setLatencyMs((int) result.latencyMs());
             message.setStatus(result.status());
+            message.setCitationJson(writeCitations(result.citations()));
             messageMapper.updateById(message);
 
             Conversation conversation = new Conversation();
@@ -155,7 +166,7 @@ public class ConversationService {
         List<ConversationDetail.Item> messages = rows.stream()
                 .map(row -> new ConversationDetail.Item(row.getId(), row.getRole(), row.getContent(),
                         row.getStatus(), row.getTokensIn(), row.getTokensOut(), row.getLatencyMs(),
-                        row.getModel(), iso(row.getCreatedAt())))
+                        row.getModel(), readCitations(row.getCitationJson()), iso(row.getCreatedAt())))
                 .toList();
         return new ConversationDetail(conversation.getUid(), conversation.getTitle(),
                 conversation.getModule(), messages);
@@ -169,12 +180,19 @@ public class ConversationService {
         return time == null ? "" : time.format(ISO_LOCAL_DATE_TIME);
     }
 
-    private Conversation findOrCreate(String uid, Long userId, String module, String content) {
+    private Conversation findOrCreate(String uid, Long userId, String module, String content, Long kbId) {
         Conversation existing = conversationMapper.selectOne(
                 Wrappers.<Conversation>lambdaQuery().eq(Conversation::getUid, uid));
         if (existing != null) {
             if (!userId.equals(existing.getUserId())) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该会话");
+            }
+            if (kbId != null && !kbId.equals(existing.getKbId())) {
+                Conversation patch = new Conversation();
+                patch.setId(existing.getId());
+                patch.setKbId(kbId);
+                conversationMapper.updateById(patch);
+                existing.setKbId(kbId);
             }
             return existing;
         }
@@ -183,6 +201,7 @@ public class ConversationService {
         conversation.setUid(uid);
         conversation.setUserId(userId);
         conversation.setModule(StringUtils.hasText(module) ? module : "chat");
+        conversation.setKbId(kbId);
         conversation.setTitle(titleOf(content));
         conversation.setLastMessageAt(LocalDateTime.now());
         try {
@@ -192,6 +211,30 @@ public class ConversationService {
             // 并发下另一个请求已建好同一 uid，复用即可
             return conversationMapper.selectOne(
                     Wrappers.<Conversation>lambdaQuery().eq(Conversation::getUid, uid));
+        }
+    }
+
+    private String writeCitations(List<Citation> citations) {
+        if (citations == null || citations.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(citations);
+        } catch (Exception ex) {
+            log.warn("serialize citations failed: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    private List<Citation> readCitations(String json) {
+        if (!StringUtils.hasText(json)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Citation>>() { });
+        } catch (Exception ex) {
+            log.warn("parse citations failed: {}", ex.getMessage());
+            return List.of();
         }
     }
 
