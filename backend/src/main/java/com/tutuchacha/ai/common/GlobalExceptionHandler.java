@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -57,6 +58,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Result<Void>> handleNotFound(NoResourceFoundException ex) {
         return build(ErrorCode.NOT_FOUND, "接口不存在: /" + ex.getResourcePath());
+    }
+
+    /** 超过 multipart 上限：容器在进入 controller 前就抛，统一成 400 便于前端提示。 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Result<Void>> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        return build(ErrorCode.BAD_REQUEST, "文件超过大小限制");
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

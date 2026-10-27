@@ -52,7 +52,7 @@ public class KnowledgeBaseService {
     }
 
     public KnowledgeBaseView detail(String username, Long id) {
-        return toView(owned(username, id));
+        return toView(requireOwned(username, id));
     }
 
     @Transactional
@@ -74,7 +74,7 @@ public class KnowledgeBaseService {
     /** 全量覆盖：未传的字段回落默认值，便于前端「只改名称」也直接提交整表单。 */
     @Transactional
     public KnowledgeBaseView update(String username, Long id, KnowledgeBaseRequest request) {
-        KnowledgeBase entity = owned(username, id);
+        KnowledgeBase entity = requireOwned(username, id);
         apply(entity, request);
         knowledgeBaseMapper.updateById(entity);
         return toView(knowledgeBaseMapper.selectById(entity.getId()));
@@ -82,7 +82,21 @@ public class KnowledgeBaseService {
 
     @Transactional
     public void delete(String username, Long id) {
-        knowledgeBaseMapper.deleteById(owned(username, id).getId());
+        knowledgeBaseMapper.deleteById(requireOwned(username, id).getId());
+    }
+
+    /** 文档增删后维护冗余计数，最小保护到 0。 */
+    @Transactional
+    public void adjustDocumentCount(Long knowledgeBaseId, int delta) {
+        KnowledgeBase entity = knowledgeBaseMapper.selectById(knowledgeBaseId);
+        if (entity == null) {
+            return;
+        }
+        int current = entity.getDocumentCount() == null ? 0 : entity.getDocumentCount();
+        KnowledgeBase patch = new KnowledgeBase();
+        patch.setId(knowledgeBaseId);
+        patch.setDocumentCount(Math.max(0, current + delta));
+        knowledgeBaseMapper.updateById(patch);
     }
 
     private void apply(KnowledgeBase entity, KnowledgeBaseRequest request) {
@@ -103,7 +117,7 @@ public class KnowledgeBaseService {
     }
 
     /** 取当前用户名下的知识库：不存在 404，别人的 403。 */
-    private KnowledgeBase owned(String username, Long id) {
+    public KnowledgeBase requireOwned(String username, Long id) {
         KnowledgeBase entity = knowledgeBaseMapper.selectById(id);
         if (entity == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "知识库不存在");

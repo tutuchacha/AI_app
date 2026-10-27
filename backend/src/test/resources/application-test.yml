@@ -15,3 +15,10 @@ management:
   health:
     db:
       enabled: false
+
+app:
+  rag:
+    # 测试走同步解析，断言 READY 结果；上限调小便于验证超限分支
+    upload-dir: ${java.io.tmpdir}/ai-app-test-uploads
+    max-file-size: 1MB
+    async: false
