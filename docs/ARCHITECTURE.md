@@ -9,9 +9,9 @@
 flowchart LR
     U[浏览器] -->|5173| V[Vue 3 + Vite<br/>frontend/]
     V -->|/api 代理| S[Spring Boot 3.5<br/>backend/ :8080]
-    S -->|MyBatis-Plus| D[(MySQL 8<br/>ai_app)]
+    S -->|MyBatis-Plus| D[(PostgreSQL 16<br/>+ pgvector<br/>ai_app)]
     S -.->|M1 SSE 流式| M[模型服务<br/>DeepSeek / Ollama]
-    V -.->|M0 当前| MK[Mock 流式<br/>chat/mockTransport.ts]
+    V -.->|当前| MK[Mock 流式<br/>chat/mockTransport.ts]
 ```
 
 - 前端只认 `/api`，代理配置在 `frontend/vite.config.ts`

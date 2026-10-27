@@ -1,7 +1,7 @@
 # RAG 模块（M2）
 
 > 先读 §0。表结构见 `db/migration/V4__rag.sql`，接口契约见 `02-接口约定.md` §6。
-> 向量先落 MySQL JSON + Java 侧相似度，规模上来再换向量库（M6）。
+> 向量存 PostgreSQL + pgvector：`embedding` 文本生成 `embedding_vec vector(1024)`，检索走 HNSW。
 
 ## 0. 速览
 
@@ -19,7 +19,7 @@
 | --- | --- | --- |
 | `knowledge_base` | `user_id`、`name`、`embedding_model`、`chunk_size`、`chunk_overlap`、`document_count` | 切片参数按库配置，改 `embedding_model` 需重建索引 |
 | `document` | `kb_id`、`filename`、`ext`、`size`、`sha256`、`status`、`chunk_count`、`error_msg` | 状态机 `PENDING → PARSING → INDEXING → READY / FAILED` |
-| `document_chunk` | `document_id`、`kb_id`、`chunk_index`、`content`、`embedding`、`token_count`、`metadata_json` | `embedding` 为 JSON 数组（M2-03 起必有值），维度随向量模型 |
+| `document_chunk` | `document_id`、`kb_id`、`chunk_index`、`content`、`embedding`、`embedding_vec`、`token_count`、`metadata_json` | `embedding` 为 JSON 数组（M2-03 起必有值）；`embedding_vec` 是 pgvector 生成列 |
 
 - 删除链：库 → 文档 → 切片 / 分析记录（`document_analysis`），全部走外键 `ON DELETE CASCADE`，应用层不手工清子表。
 - 删库时 `KnowledgeBaseService.delete` 额外把 `conversation.kb_id` 置空（`conversationMapper`），避免会话指向已删库。
@@ -53,9 +53,10 @@
 
 ## 4. 约束与坑
 
-- 检索：问题向量化后与库内切片算余弦相似度，按 `app.rag.min-score`（默认 0.2）过滤、`app.rag.top-k`（默认 6）截断
-- 检索只加载该库最近 5000 片；`embedding` 为空、JSON 损坏或维度与问题向量不一致的切片直接跳过，不让脏数据拖垮请求
-- 向量：`AiGateway.embed(List)` 走百炼 `text-embedding-v3`（`app.ai.embedding-model`），按 `app.rag.embedding-batch-size`（默认 10）分批
+- 检索：问题向量化后交给 `app.rag.vector-store`（默认 `pg`）——pgvector SQL `<=>` 排序 + HNSW 索引，
+  相似度阈值 `min-score`（默认 0.2）、返回片数 `top-k`（默认 6）都在 SQL 里裁。
+- `vector-store: memory` 才走旧的 Java 余弦路径（H2 测试库没有 pgvector）；memory 模式最多加载该库 5000 片。
+- 向量：`AiGateway.embed(List)` 走百炼 `text-embedding-v3`（`app.ai.embedding-model`，1024 维），按 `app.rag.embedding-batch-size`（默认 10）分批
 - 先全部向量化成功再落切片：任一批失败整篇标 `FAILED`，不留下半套切片；重建索引会重算向量
 - 文档 `READY` 即「文本已切 + 向量已齐」；无密钥时执行失败并提示 `DASHSCOPE_API_KEY`
 - 业务代码不直接依赖 Spring AI 类：向量调用后续统一走 `AiGateway`，`knowledge/` 只依赖自己的端口。

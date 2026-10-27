@@ -106,22 +106,11 @@ public class DocumentParser {
             chunk.setKbId(document.getKbId());
             chunk.setChunkIndex(i);
             chunk.setContent(content);
-            chunk.setEmbedding(toJson(vectors.get(i)));
+            chunk.setEmbedding(Vectors.toLiteral(vectors.get(i)));
             chunk.setTokenCount(content.length());
             chunk.setMetadataJson("{\"source\":\"" + document.getFilename().replace("\"", "") + "\"}");
             chunkMapper.insert(chunk);
         }
-    }
-
-    private String toJson(float[] vector) {
-        StringBuilder json = new StringBuilder(vector.length * 8).append('[');
-        for (int i = 0; i < vector.length; i += 1) {
-            if (i > 0) {
-                json.append(',');
-            }
-            json.append(vector[i]);
-        }
-        return json.append(']').toString();
     }
 
     private void mark(Long documentId, String status, int chunkCount, String errorMsg) {

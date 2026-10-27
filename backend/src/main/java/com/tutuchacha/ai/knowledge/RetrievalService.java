@@ -19,16 +19,18 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * 向量检索：问题向量化 → 取库内切片 → 余弦相似度 → 阈值过滤 → 截断 topK。
- * 规模原型阶段在 Java 侧算分；切片量上来再换向量库（M6）。
+ * 向量检索：问题向量化 → 取库内切片 → 相似度 → 阈值过滤 → 截断 topK。
+ * 正式库走 pgvector（SQL 排序 + HNSW）；H2 测试库没有扩展，退回 Java 余弦。
  */
 @Service
 public class RetrievalService {
 
     private static final Logger log = LoggerFactory.getLogger(RetrievalService.class);
 
-    /** 单次检索最多加载的切片数，超过只取最早的一批，防止大库拖垮请求。 */
+    /** memory 模式下单次检索最多加载的切片数，防止大库拖垮请求（pg 模式由 SQL LIMIT 裁剪）。 */
     private static final int MAX_CANDIDATES = 5000;
+
+    private static final String STORE_PG = "pg";
 
     private final KnowledgeBaseService knowledgeBaseService;
     private final DocumentChunkMapper chunkMapper;
@@ -63,6 +65,39 @@ public class RetrievalService {
 
         float[] queryVector = embedQuery(query);
 
+        List<Hit> top = usePgVector()
+                ? searchByPgvector(knowledgeBaseId, queryVector, topK, minScore)
+                : searchInMemory(knowledgeBaseId, queryVector, topK, minScore);
+        if (top.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, String> filenames = loadFilenames(top);
+        return top.stream()
+                .map(hit -> new SearchHit(
+                        hit.chunkId(),
+                        hit.documentId(),
+                        filenames.getOrDefault(hit.documentId(), ""),
+                        hit.chunkIndex(),
+                        hit.score(),
+                        hit.content()))
+                .toList();
+    }
+
+    private boolean usePgVector() {
+        return STORE_PG.equals(properties.vectorStoreOrDefault());
+    }
+
+    /** pgvector：阈值与 topK 交给 PG，返回顺序即相似度倒序。 */
+    private List<Hit> searchByPgvector(Long knowledgeBaseId, float[] queryVector, int topK, double minScore) {
+        return chunkMapper.searchByVector(knowledgeBaseId, Vectors.toLiteral(queryVector), minScore, topK)
+                .stream()
+                .map(row -> new Hit(row.id(), row.documentId(), row.chunkIndex(), row.content(),
+                        row.score() == null ? 0d : row.score()))
+                .toList();
+    }
+
+    private List<Hit> searchInMemory(Long knowledgeBaseId, float[] queryVector, int topK, double minScore) {
         List<DocumentChunk> chunks = chunkMapper.selectList(Wrappers.<DocumentChunk>lambdaQuery()
                 .eq(DocumentChunk::getKbId, knowledgeBaseId)
                 .isNotNull(DocumentChunk::getEmbedding)
@@ -72,7 +107,7 @@ public class RetrievalService {
             return List.of();
         }
 
-        List<Scored> scored = new ArrayList<>();
+        List<Hit> scored = new ArrayList<>();
         for (DocumentChunk chunk : chunks) {
             float[] vector = parseEmbedding(chunk.getEmbedding());
             if (vector == null || vector.length != queryVector.length) {
@@ -80,25 +115,12 @@ public class RetrievalService {
             }
             double score = CosineSimilarity.between(queryVector, vector);
             if (score >= minScore) {
-                scored.add(new Scored(chunk, score));
+                scored.add(new Hit(chunk.getId(), chunk.getDocumentId(), chunk.getChunkIndex(),
+                        chunk.getContent(), score));
             }
         }
-        scored.sort(Comparator.comparingDouble(Scored::score).reversed());
-        List<Scored> top = scored.subList(0, Math.min(topK, scored.size()));
-        if (top.isEmpty()) {
-            return List.of();
-        }
-
-        Map<Long, String> filenames = loadFilenames(top);
-        return top.stream()
-                .map(scoredChunk -> new SearchHit(
-                        scoredChunk.chunk().getId(),
-                        scoredChunk.chunk().getDocumentId(),
-                        filenames.getOrDefault(scoredChunk.chunk().getDocumentId(), ""),
-                        scoredChunk.chunk().getChunkIndex(),
-                        scoredChunk.score(),
-                        scoredChunk.chunk().getContent()))
-                .toList();
+        scored.sort(Comparator.comparingDouble(Hit::score).reversed());
+        return List.copyOf(scored.subList(0, Math.min(topK, scored.size())));
     }
 
     private float[] embedQuery(String query) {
@@ -123,9 +145,9 @@ public class RetrievalService {
         }
     }
 
-    private Map<Long, String> loadFilenames(List<Scored> top) {
+    private Map<Long, String> loadFilenames(List<Hit> top) {
         List<Long> documentIds = top.stream()
-                .map(scoredChunk -> scoredChunk.chunk().getDocumentId())
+                .map(Hit::documentId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
@@ -134,6 +156,6 @@ public class RetrievalService {
                         (left, right) -> left));
     }
 
-    private record Scored(DocumentChunk chunk, double score) {
+    private record Hit(Long chunkId, Long documentId, Integer chunkIndex, String content, double score) {
     }
 }

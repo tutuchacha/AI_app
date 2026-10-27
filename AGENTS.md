@@ -68,6 +68,7 @@
 
 ## 5. 环境速查
 
-JDK 21（本机 `D:\JDK21`）、Maven 3.6.3、Node 24、MySQL 8（`net start mysql`）、SSH remote
-`git@github.com:tutuchacha/AI_app.git`。端口：前端 5173、后端 8080、MySQL 3306、
+JDK 21（本机 `D:\JDK21`）、Maven 3.6.3、Node 24、SSH remote `git@github.com:tutuchacha/AI_app.git`。
+数据库 **PostgreSQL 16 + pgvector**，跑在 CentOS VM `192.168.101.137:5432`（Docker，`ops/docker-compose.vm.yml`）；
+本机不再用 MySQL（旧库保留作回滚，服务已停）。端口：前端 5173、后端 8080、PG 5432、
 Prometheus 9090、Grafana 3000、Ollama 11434。详见 `docs/01-环境准备.md`。

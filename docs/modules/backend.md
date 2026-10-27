@@ -1,7 +1,7 @@
 # 后端模块（M0 骨架）
 
 > 目标：先把「能启动、能登录、能迁移」跑通，再接 AI 能力。
-> 版本：JDK 21、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Flyway、MySQL 8。
+> 版本：JDK 21、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Flyway、PostgreSQL 16 + pgvector。
 > Spring AI 1.1.8 在 M1 引入，M0 不建模型调用。
 
 ## 0. 速览（只读这节）
@@ -10,7 +10,7 @@
 - 当前：M2 进行中；M2-01 知识库 CRUD 完成，下一步文档上传与解析
 - 关键文件：`pom.xml`、`application-local.yml`、`V1__init.sql`~`V5__chat_citation.sql`、`gateway/`、`chat/`、`knowledge/`、`SecurityConfig`、`auth/`
 - 验收：`/actuator/health` = UP；登录拿 token；`/me` 返回用户名
-- 数据库：`127.0.0.1:3306/ai_app`，账号密码见 `application-local.yml`
+- 数据库：**VM `192.168.101.137:5432/ai_app`**（PG 16 + pgvector），账号密码见 `application-local.yml`
 
 ## 1. 包结构
 
@@ -31,7 +31,7 @@ backend/src/main/java/com/tutuchacha/ai/
 
 ### M0-B01 工程初始化
 - 文件：`backend/pom.xml`、`AiApplication.java`、`application.yml`、`application-local.yml`
-- 依赖：web、validation、security、actuator、mybatis-plus、flyway、mysql、springdoc、jjwt
+- 依赖：web、validation、security、actuator、mybatis-plus、flyway（含 `flyway-database-postgresql`）、postgresql、springdoc、jjwt
 - 配置：端口 8080、`/api` 前缀、local profile、日志级别
 - 验收：`mvn spring-boot:run` 启动，访问 `/actuator/health` 返回 `UP`
 - 注意：`application-local.yml` 已被 gitignore，数据库密码只放这里或环境变量
@@ -90,19 +90,18 @@ backend/src/main/java/com/tutuchacha/ai/
 ## 3. 建库命令（已执行，留作换机参考）
 
 ```sql
-CREATE DATABASE ai_app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-CREATE USER 'ai_app'@'localhost' IDENTIFIED BY '<见 application-local.yml>';
-GRANT ALL PRIVILEGES ON ai_app.* TO 'ai_app'@'localhost';
-FLUSH PRIVILEGES;
+-- 用 pgvector/pgvector:pg16 镜像建容器后，库由 POSTGRES_DB 自动创建；
+-- 手装 PG 时补一条（V4 迁移里也有，需要超级用户）：
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-表结构与排障见 `docs/modules/database.md`。
+表结构、生成列与排障见 `docs/modules/database.md`；VM 上的 compose 见 `ops/docker-compose.vm.yml`。
 
 ## 4. 本地启动
 
 ```powershell
-# 管理员
-net start mysql
+# 数据库在 VM 上，先确认能连 5432（docker compose 已设 restart: unless-stopped）
+Test-NetConnection 192.168.101.137 -Port 5432 -InformationLevel Quiet
 
 cd D:\AI_learn\backend
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local

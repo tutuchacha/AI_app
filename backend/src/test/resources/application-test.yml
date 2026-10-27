@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:ai_app;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:ai_app;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
     username: sa
     password:
@@ -23,6 +23,8 @@ app:
     max-file-size: 1MB
     async: false
     embedding-batch-size: 2
+    # H2 没有 pgvector，测试走 Java 余弦，播种向量用 3 维
+    vector-store: memory
   analysis:
     # 同步执行，断言 READY / FAILED 结果；正文上限调小便于验证截断
     async: false

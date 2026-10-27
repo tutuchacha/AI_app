@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | `STATUS.md` | 当前进度、下一步、阻塞 | **每次开工必读** | 35 |
 | `00-架构方案.md` | 总体架构、技术选型、表结构、路线图 | 只读 §1；改架构再跳读 | 450 |
-| `01-环境准备.md` | JDK/MySQL/Git/Ollama/Nginx 安装 | 换机器 / 环境报错 | 220 |
+| `01-环境准备.md` | JDK/PostgreSQL+pgvector/Git/Ollama/Nginx 安装 | 换机器 / 环境报错 | 220 |
 | `04-对标-yu-ai-agent.md` | 目标能力地图、差距、调整路线图 | 规划阶段 / 加 Agent | 200 |
 | `modules/frontend.md` | M0 界面、目录职责、F0-01~F0-10 实现步骤 | 做前端 / 接后端 | 120 |
 | `modules/backend.md` | M0 后端骨架、B01~B06 步骤、建库命令 | 做后端 / 联调 | 120 |

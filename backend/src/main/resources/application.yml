@@ -16,9 +16,10 @@ spring:
       max-file-size: 20MB
       max-request-size: 21MB
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/ai_app?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
-    username: ${DB_USERNAME:ai_app}
+    driver-class-name: org.postgresql.Driver
+    # 真实连接串放 application-local.yml（gitignored），生产用 DB_URL 覆盖
+    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5432/ai_app}
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:change_me}
     hikari:
       maximum-pool-size: 10
@@ -105,6 +106,8 @@ app:
     async: ${RAG_ASYNC:true}
     # 单次向量请求的切片数（百炼 v3 单批上限 10）
     embedding-batch-size: ${RAG_EMBEDDING_BATCH:10}
+    # 向量检索实现：pg = pgvector（HNSW + 余弦距离）；memory = Java 侧余弦（H2 测试）
+    vector-store: ${RAG_VECTOR_STORE:pg}
     # 检索默认返回片数与相似度下限（低于阈值的切片直接丢弃）
     top-k: ${RAG_TOP_K:6}
     min-score: ${RAG_MIN_SCORE:0.2}

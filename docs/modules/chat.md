@@ -15,7 +15,7 @@
 ## 1. 目标
 
 - 多轮会话、流式输出、停止与重试；同一套逻辑支持 SSE 与 WS。
-- 会话与消息落 MySQL，刷新可恢复；token/时延/错误进 Grafana。
+- 会话与消息落 PostgreSQL，刷新可恢复；token/时延/错误进 Grafana。
 
 ## 2. 分层
 

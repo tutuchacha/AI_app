@@ -1,28 +1,28 @@
 # 星屿 AI（AI_app）
 
 一个边做边学的 AI 应用：通用聊天、恋爱陪伴、智能客服、文档分析、RAG、可观测性。
-当前 **M0：前端界面已完成**，下一步补 Spring Boot 后端。
+当前 **M3 文档分析完成**（M0~M3 已交付），数据库为 PostgreSQL 16 + pgvector，监控在 VM 上跑通。
 
 ## 现在能看什么
 
-- 8 个页面：登录、对话、陪伴、客服、知识库、文档分析、看板、设置
-- Mock 流式输出、停止生成、客服引用卡片、学习提示
-- 打开 http://127.0.0.1:5173 ，演示账号 `demo / 123456`
+- 8 个页面：登录、对话、陪伴、客服、知识库、文档分析、看板、设置（除看板外均接真实后端）
+- 真实登录（JWT）、SSE/WS 流式对话、RAG 引用、文档上传解析、四类文档分析
+- 打开 http://127.0.0.1:5173 ，注册或登录后使用
 
 ## 快速开始
 
 ```powershell
-# 前端（现在可用）
+# 前端
 cd D:\AI_learn\frontend
 npm install
 npm run dev
 
-# 后端（M0-B01 生成后）
+# 后端（数据库在 VM 上，先确认 5432 可达）
 cd D:\AI_learn\backend
 .\mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-MySQL 需先由管理员执行 `net start mysql`；建库 SQL 见 `docs/modules/backend.md` §3。
+PostgreSQL 16 + pgvector 跑在 CentOS VM（`192.168.101.137:5432`，`ops/docker-compose.vm.yml`）；建库与连接见 `docs/modules/database.md`。
 
 ## 技术栈
 
@@ -30,14 +30,15 @@ MySQL 需先由管理员执行 `net start mysql`；建库 SQL 见 `docs/modules/
 | --- | --- |
 | 后端 | JDK 21、Spring Boot 3.5、Spring AI 1.1、MyBatis-Plus、Flyway |
 | 前端 | Vue 3、TypeScript、Vite、Pinia、Element Plus |
-| 数据 | MySQL 8、SimpleVectorStore / 自研 MySQL 向量库 |
+| 数据 | PostgreSQL 16 + pgvector（HNSW 向量检索） |
 | 基础设施 | Nginx、Prometheus、Grafana、Ollama / OpenAI 兼容 API |
 
 ## 目录
 
 ```text
-frontend/   Vue 3 应用（已完成）
-backend/    Spring Boot 服务（M0-B01 起）
+frontend/   Vue 3 应用
+backend/    Spring Boot 服务
+ops/        PostgreSQL / Prometheus / Grafana 的 compose 与看板
 docs/       状态、模块手册、ADR、进度
 scripts/    文档预算检查
 ```
@@ -55,13 +56,13 @@ scripts/    文档预算检查
 2) docs/INDEX.md 中与本次相关的一行
 3) docs/modules/backend.md 的「0. 速览」（做其他模块就换对应文件）
 
-当前 M0 前端已完成，下一步 M0-B01 后端工程初始化。
+当前 M3 文档分析已完成，下一步 M4 内容待确认；数据库为 PostgreSQL 16 + pgvector（VM）。
 先复述：现在做到哪、下一步、阻塞项，再开始动手。
 每完成一步：重写 docs/STATUS.md、追加 docs/progress/2026-10.md、commit + push。
 不要全量读 docs/、00-架构方案.md、progress 历史或旧 ADR。
 ```
 
-换机器：`git clone git@github.com:tutuchacha/AI_app.git`，JDK 21 与 MySQL 见 `docs/01-环境准备.md`。
+换机器：`git clone git@github.com:tutuchacha/AI_app.git`，JDK 21 与 PostgreSQL/pgvector 见 `docs/01-环境准备.md`。
 
 ## 文档与上下文规则
 

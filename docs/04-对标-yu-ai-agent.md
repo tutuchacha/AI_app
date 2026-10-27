@@ -46,8 +46,8 @@
 | 问题 | 影响 | 我们的做法 |
 | --- | --- | --- |
 | 无登录/用户隔离 | `chatId` 由客户端传，可越权读会话 | JWT + 所有表带 `user_id` |
-| 无业务数据库 | 会话、报告不落库，重启即失 | MySQL + Flyway |
-| 记忆默认在内存 | 多实例/重启丢上下文 | 短期记忆落 MySQL，长期记忆自研 |
+| 无业务数据库 | 会话、报告不落库，重启即失 | PostgreSQL + Flyway |
+| 记忆默认在内存 | 多实例/重启丢上下文 | 短期记忆落 `message` 表，长期记忆自研 |
 | API Key 写在 yml | 易泄漏 | 环境变量 + 密钥加密 |
 | 无配额/限流/成本控制 | 工具与模型可被刷爆 | Bucket4j + 每日 token 配额 |
 | 终端/文件工具无沙箱 | 提示词注入可直接危害主机 | 工具白名单 + 目录沙箱 + 人工确认 |
@@ -63,7 +63,7 @@
 ```
 业务层   chat  |  companion(AI恋爱)  |  support(客服)  |  analysis(文档)  |  agent
 能力层   AiGateway | Advisor管道 | RAG | Memory | ToolRegistry | AgentEngine | MCP Client
-平台层   Auth/JWT | MySQL/Flyway | 限流配额 | 可观测 | Nginx | 配置与密钥
+平台层   Auth/JWT | PostgreSQL+pgvector/Flyway | 限流配额 | 可观测 | Nginx | 配置与密钥
 ```
 
 - **AI 恋爱** = 角色卡 + 长期记忆 + RAG（情感知识）+ 结构化「恋爱报告」。
@@ -99,9 +99,10 @@
 
 ## 8. 和现有方案的关系
 
-- 技术底座不变：Spring AI + Vue 3 + MySQL + Nginx + Prometheus/Grafana。
+- 技术底座不变：Spring AI + Vue 3 + PostgreSQL（+ pgvector）+ Nginx + Prometheus/Grafana。
 - 新增两块：**Tool/MCP**（M2.5）与 **ReAct Agent**（M4.5）。
-- 向量库仍按原计划：一期 SimpleVectorStore，二期自研 MySQL；不引入 PgVector，避免多装一套 PostgreSQL。
+- 向量库已调整：原计划「一期 SimpleVectorStore、二期自研 MySQL」，实际直接落 **PostgreSQL 16 + pgvector**
+  （VM Docker，HNSW）；`memory`（Java 余弦）只留给 H2 测试，见 `modules/rag.md`。
 - 不照搬它的前端与无鉴权结构；前端继续 TS + Pinia + Element Plus。
 
 ## 9. 结论
