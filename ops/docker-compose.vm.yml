@@ -1,0 +1,76 @@
+name: xingyu-vm
+
+# 这台 CentOS VM 只承担「数据 + 监控」，后端/前端仍在 Windows 开发机跑：
+#   PG 5432 / Prometheus 9090 / Grafana 3000
+# 常用命令（cd ops 后）：
+#   docker compose -f docker-compose.vm.yml up -d
+#   docker compose -f docker-compose.vm.yml ps
+#   docker compose -f docker-compose.vm.yml logs -f grafana
+#   docker compose -f docker-compose.vm.yml down      （加 -v 会删库，慎用）
+# 变量来自同目录 .env（从 .env.example 复制，不要提交）
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "2"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ai_app}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus-vm.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./prometheus:/etc/prometheus:ro,z
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      # 默认指向本机网关（全容器部署）；后端跑在 Windows 开发机时，
+      # 在 .env 里把 BACKEND_HOST 设成开发机 IP（如 192.168.101.1）
+      - "host.docker.internal:${BACKEND_HOST:-host-gateway}"
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro,z
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro,z
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    logging: *default-logging
+
+volumes:
+  pg-data:
+  prometheus-data:
+  grafana-data:

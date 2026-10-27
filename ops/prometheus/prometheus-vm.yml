@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# VM 专用：后端仍跑在 Windows 开发机（192.168.101.1:8080），
+# 容器里通过 host-gateway 映射的 host.docker.internal 访问（见 docker-compose.vm.yml）。
+# compose 内全容器部署用 prometheus.yml，本机直接跑 prometheus.exe 用 prometheus-local.yml。
+scrape_configs:
+  - job_name: ai-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - host.docker.internal:8080
+        labels:
+          app: ai-app

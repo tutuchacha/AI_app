@@ -13,13 +13,14 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "请求速率（按结果）",
+      "title": "请求数（近 5 分钟）",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 12, "showPoints": "never" }
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 12, "showPoints": "always", "pointSize": 6 }
         },
         "overrides": []
       },
@@ -30,7 +31,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (status) (rate(ai_chat_requests_total[5m]))",
+          "expr": "sum by (status) (increase(ai_chat_requests_total[5m]))",
           "legendFormat": "{{status}}"
         }
       ]
@@ -63,13 +64,14 @@
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Token 速率",
+      "title": "Token 消耗（近 5 分钟）",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 40, "showPoints": "never", "stacking": { "mode": "normal" } }
+          "min": 0,
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 40, "showPoints": "always", "pointSize": 6, "stacking": { "mode": "normal" } }
         },
         "overrides": []
       },
@@ -80,7 +82,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (type) (rate(ai_chat_tokens_total[5m]))",
+          "expr": "sum by (type) (increase(ai_chat_tokens_total[5m]))",
           "legendFormat": "{{type}}"
         }
       ]
@@ -137,7 +139,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(ai_chat_requests_total{status=\"failed\"}[5m])) / clamp_min(sum(rate(ai_chat_requests_total[5m])), 0.001)",
+          "expr": "(sum(rate(ai_chat_requests_total{status=\"failed\"}[5m])) / clamp_min(sum(rate(ai_chat_requests_total[5m])), 0.001)) or vector(0)",
           "legendFormat": "failed / total"
         }
       ]
