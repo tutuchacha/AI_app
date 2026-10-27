@@ -2,6 +2,9 @@ package com.tutuchacha.ai.knowledge;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tutuchacha.ai.common.BusinessException;
+import com.tutuchacha.ai.common.ErrorCode;
+import com.tutuchacha.ai.gateway.AiGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,12 +14,19 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -38,6 +48,9 @@ class DocumentControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @MockitoBean
+    private AiGateway aiGateway;
+
     @Autowired
     private JdbcTemplate jdbc;
 
@@ -48,6 +61,11 @@ class DocumentControllerTest {
     void seedUsers() {
         seedUser("demo");
         seedUser("other");
+        // 测试不连真实向量服务：返回固定 3 维向量，长度派生自文本便于断言
+        when(aiGateway.embed(anyList())).thenAnswer(invocation -> {
+            List<String> batch = invocation.getArgument(0);
+            return batch.stream().map(text -> new float[]{text.length(), 0.5f, 1.5f}).toList();
+        });
     }
 
     private void seedUser(String username) {
@@ -106,6 +124,10 @@ class DocumentControllerTest {
                 "select content from document_chunk where document_id = ? order by chunk_index limit 1",
                 String.class, documentId);
         assertThat(firstChunk).contains("聘聊");
+        String embedding = jdbc.queryForObject(
+                "select embedding from document_chunk where document_id = ? order by chunk_index limit 1",
+                String.class, documentId);
+        assertThat(embedding).startsWith("[").contains(",");
 
         mockMvc.perform(get("/api/knowledge-bases/" + kbId).with(user("demo").roles("USER")))
                 .andExpect(jsonPath("$.data.documentCount").value(1));
@@ -207,6 +229,30 @@ class DocumentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].status").value("READY"));
+    }
+
+    @Test
+    void embedsChunksInBatches() throws Exception {
+        long kbId = createKnowledgeBase("demo");
+        documentId(upload("demo", kbId, "batch.txt", LONG_TEXT.getBytes(StandardCharsets.UTF_8)));
+
+        // 测试配置 batch=2，原文约 7 片，至少两次调用
+        verify(aiGateway, atLeast(2)).embed(anyList());
+    }
+
+    @Test
+    void embeddingFailureMarksDocumentFailedWithoutChunks() throws Exception {
+        doThrow(new BusinessException(ErrorCode.SERVICE_UNAVAILABLE,
+                "未配置模型密钥：请设置环境变量 DASHSCOPE_API_KEY 后重启后端"))
+                .when(aiGateway).embed(anyList());
+        long kbId = createKnowledgeBase("demo");
+
+        MvcResult result = upload("demo", kbId, "nokey.txt", LONG_TEXT.getBytes(StandardCharsets.UTF_8));
+
+        JsonNode data = objectMapper.readTree(result.getResponse().getContentAsString()).path("data");
+        assertThat(data.path("status").asText()).isEqualTo("FAILED");
+        assertThat(data.path("errorMsg").asText()).contains("DASHSCOPE_API_KEY");
+        assertThat(chunkRows(data.path("id").asLong())).isZero();
     }
 
     @Test

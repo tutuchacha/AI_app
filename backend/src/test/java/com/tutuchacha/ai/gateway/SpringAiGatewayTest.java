@@ -12,6 +12,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 import reactor.core.publisher.Flux;
 
@@ -30,8 +31,40 @@ class SpringAiGatewayTest {
     @SuppressWarnings("unchecked")
     private final ObjectProvider<ChatModel> provider = mock(ObjectProvider.class);
 
+    @SuppressWarnings("unchecked")
+    private final ObjectProvider<EmbeddingModel> embeddingProvider = mock(ObjectProvider.class);
+
     private final AiProperties properties = new AiProperties(
-            "https://dashscope.aliyuncs.com/compatible-mode/v1", "test-key", "qwen-plus", 0.7, 1024, null);
+            "https://dashscope.aliyuncs.com/compatible-mode/v1", "test-key", "qwen-plus", 0.7, 1024, null,
+            "text-embedding-v3");
+
+    private SpringAiGateway gateway() {
+        return new SpringAiGateway(provider, embeddingProvider, properties);
+    }
+
+    @Test
+    void embedsTextsInOrder() {
+        EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
+        when(embeddingProvider.getIfAvailable()).thenReturn(embeddingModel);
+        when(embeddingModel.embed(List.of("甲", "乙")))
+                .thenReturn(List.of(new float[]{1f, 2f}, new float[]{3f, 4f}));
+
+        List<float[]> vectors = gateway().embed(List.of("甲", "乙"));
+
+        assertThat(vectors).hasSize(2);
+        assertThat(vectors.get(0)).containsExactly(1f, 2f);
+        assertThat(vectors.get(1)).containsExactly(3f, 4f);
+    }
+
+    @Test
+    void embedReturns503WhenApiKeyMissing() {
+        when(embeddingProvider.getIfAvailable()).thenReturn(null);
+
+        assertThatThrownBy(() -> gateway().embed(List.of("甲")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SERVICE_UNAVAILABLE)
+                .hasMessageContaining("DASHSCOPE_API_KEY");
+    }
 
     @Test
     void mapsRequestToSpringAiAndBack() {
@@ -44,7 +77,7 @@ class SpringAiGatewayTest {
                         .build());
         when(chatModel.call(any(Prompt.class))).thenReturn(response);
 
-        AiChatResponse result = new SpringAiGateway(provider, properties)
+        AiChatResponse result = gateway()
                 .complete(AiChatRequest.of("你是助手", "你好"));
 
         assertThat(result.content()).isEqualTo("你好，我是星屿");
@@ -65,7 +98,7 @@ class SpringAiGatewayTest {
     void returns503WhenApiKeyMissing() {
         when(provider.getIfAvailable()).thenReturn(null);
 
-        assertThatThrownBy(() -> new SpringAiGateway(provider, properties)
+        assertThatThrownBy(() -> gateway()
                 .complete(AiChatRequest.of(null, "你好")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SERVICE_UNAVAILABLE)
@@ -77,7 +110,7 @@ class SpringAiGatewayTest {
         when(provider.getIfAvailable()).thenReturn(chatModel);
         when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("connection reset"));
 
-        assertThatThrownBy(() -> new SpringAiGateway(provider, properties)
+        assertThatThrownBy(() -> gateway()
                 .complete(AiChatRequest.of(null, "你好")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BAD_GATEWAY);
@@ -88,7 +121,7 @@ class SpringAiGatewayTest {
         when(provider.getIfAvailable()).thenReturn(chatModel);
         when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("429 rate limit"));
 
-        assertThatThrownBy(() -> new SpringAiGateway(provider, properties)
+        assertThatThrownBy(() -> gateway()
                 .complete(AiChatRequest.of(null, "你好")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TOO_MANY_REQUESTS);
@@ -105,7 +138,7 @@ class SpringAiGatewayTest {
                 ChatResponseMetadata.builder().model("qwen-plus").usage(new DefaultUsage(5, 1)).build());
         when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(first, last));
 
-        List<AiStreamChunk> chunks = new SpringAiGateway(provider, properties)
+        List<AiStreamChunk> chunks = gateway()
                 .stream(AiChatRequest.of(null, "你好"))
                 .collectList()
                 .block();

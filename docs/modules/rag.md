@@ -6,7 +6,7 @@
 ## 0. 速览
 
 - 目标：知识库 → 文档上传解析 → 切片向量化 → 检索 → 聊天带 `citation` 事件
-- 当前：M2-02 完成（上传/解析/切片/删除/重建）；下一步 M2-03 Embedding 回填
+- 当前：M2-03 完成（切片已向量化落库）；下一步 M2-04 检索
 - 代码：`knowledge/`（`KnowledgeBase*`、`Document*`、`TextChunker`、`DocumentTextExtractor`）
 - 验收：登录后建库 → 列表可见 → 改/删生效；别人的库 403、不存在 404
 - 表：`knowledge_base` / `document` / `document_chunk`
@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | `knowledge_base` | `user_id`、`name`、`embedding_model`、`chunk_size`、`chunk_overlap`、`document_count` | 切片参数按库配置，改 `embedding_model` 需重建索引 |
 | `document` | `kb_id`、`filename`、`ext`、`size`、`sha256`、`status`、`chunk_count`、`error_msg` | 状态机 `PENDING → PARSING → INDEXING → READY / FAILED` |
-| `document_chunk` | `document_id`、`kb_id`、`chunk_index`、`content`、`embedding`、`token_count`、`metadata_json` | `embedding` 为 JSON 数组，未索引时 NULL |
+| `document_chunk` | `document_id`、`kb_id`、`chunk_index`、`content`、`embedding`、`token_count`、`metadata_json` | `embedding` 为 JSON 数组（M2-03 起必有值），维度随向量模型 |
 
 - 删除链：库 → 文档 → 切片，全部走外键 `ON DELETE CASCADE`，应用层不手工清子表。
 - 同库去重按 `(kb_id, sha256)` 查，重复上传返回已有文档而不是再切一份。
@@ -44,12 +44,15 @@
 | --- | --- | --- |
 | M2-01 | `V4` 建表 + 知识库 CRUD | ✅ |
 | M2-02 | 上传（pdf/docx/txt/md、≤20MB）+ 解析 + 切片落库 | ✅ |
-| M2-03 | Embedding 批量化 + `embedding` 回填 + 重建索引 | ⏳ |
+| M2-03 | Embedding 批量化 + `embedding` 回填 + 重建索引 | ✅ |
 | M2-04 | 检索（topK=6、相似度阈值）+ `/search` 调试接口 | ⏳ |
 | M2-05 | 聊天接 RAG：拼 Prompt、`citation` 事件、前端引用展示 | ⏳ |
 
 ## 4. 约束与坑
 
+- 向量：`AiGateway.embed(List)` 走百炼 `text-embedding-v3`（`app.ai.embedding-model`），按 `app.rag.embedding-batch-size`（默认 10）分批
+- 先全部向量化成功再落切片：任一批失败整篇标 `FAILED`，不留下半套切片；重建索引会重算向量
+- 文档 `READY` 即「文本已切 + 向量已齐」；无密钥时执行失败并提示 `DASHSCOPE_API_KEY`
 - 业务代码不直接依赖 Spring AI 类：向量调用后续统一走 `AiGateway`，`knowledge/` 只依赖自己的端口。
 - 解析异步：上传立即返回 `PENDING`，`ragExecutor` 线程池跑 Tika；测试用 `app.rag.async=false` 走同步。
 - 解析在 `DocumentParser` 内闭环：失败只把该文档标 `FAILED` + `error_msg`，不抛到接口。

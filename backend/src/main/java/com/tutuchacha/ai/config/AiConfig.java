@@ -2,8 +2,12 @@ package com.tutuchacha.ai.config;
 
 import com.tutuchacha.ai.gateway.AiProperties;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.document.MetadataMode;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.OpenAiEmbeddingModel;
+import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -37,5 +41,21 @@ public class AiConfig {
                 .openAiApi(openAiApi)
                 .defaultOptions(options)
                 .build();
+    }
+
+    /** 向量模型：与聊天共用 base-url/api-key，模型名默认 text-embedding-v3。 */
+    @Bean
+    @ConditionalOnExpression("'${app.ai.api-key:}'.trim().length() > 0")
+    public EmbeddingModel aiEmbeddingModel(AiProperties properties) {
+        OpenAiApi openAiApi = OpenAiApi.builder()
+                .baseUrl(properties.baseUrlOrDefault())
+                .apiKey(properties.apiKey())
+                .build();
+
+        OpenAiEmbeddingOptions options = OpenAiEmbeddingOptions.builder()
+                .model(properties.embeddingModelOrDefault())
+                .build();
+
+        return new OpenAiEmbeddingModel(openAiApi, MetadataMode.NONE, options);
     }
 }

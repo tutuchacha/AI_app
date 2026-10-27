@@ -22,3 +22,4 @@ app:
     upload-dir: ${java.io.tmpdir}/ai-app-test-uploads
     max-file-size: 1MB
     async: false
+    embedding-batch-size: 2

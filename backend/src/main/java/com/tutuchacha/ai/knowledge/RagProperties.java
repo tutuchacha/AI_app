@@ -8,7 +8,8 @@ import org.springframework.util.unit.DataSize;
 public record RagProperties(
         String uploadDir,
         DataSize maxFileSize,
-        Boolean async
+        Boolean async,
+        Integer embeddingBatchSize
 ) {
 
     public String uploadDirOrDefault() {
@@ -22,5 +23,10 @@ public record RagProperties(
     /** 默认异步；测试里关掉以便断言解析结果。 */
     public boolean asyncEnabled() {
         return async == null || async;
+    }
+
+    /** 单次向量请求的切片数，百炼 text-embedding-v3 单批上限 10。 */
+    public int embeddingBatchSizeOrDefault() {
+        return embeddingBatchSize == null || embeddingBatchSize < 1 ? 10 : embeddingBatchSize;
     }
 }

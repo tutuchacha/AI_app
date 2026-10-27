@@ -15,7 +15,8 @@ public record AiProperties(
         String chatModel,
         Double temperature,
         Integer maxTokens,
-        Duration timeout
+        Duration timeout,
+        String embeddingModel
 ) {
     public String baseUrlOrDefault() {
         String url = baseUrl == null || baseUrl.isBlank()
@@ -27,6 +28,10 @@ public record AiProperties(
 
     public String chatModelOrDefault() {
         return chatModel == null || chatModel.isBlank() ? "qwen-plus" : chatModel;
+    }
+
+    public String embeddingModelOrDefault() {
+        return embeddingModel == null || embeddingModel.isBlank() ? "text-embedding-v3" : embeddingModel;
     }
 
     public double temperatureOrDefault() {

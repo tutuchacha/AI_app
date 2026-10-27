@@ -13,6 +13,7 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
@@ -34,11 +35,35 @@ public class SpringAiGateway implements AiGateway {
     private static final Logger log = LoggerFactory.getLogger(SpringAiGateway.class);
 
     private final ObjectProvider<ChatModel> chatModelProvider;
+    private final ObjectProvider<EmbeddingModel> embeddingModelProvider;
     private final AiProperties properties;
 
-    public SpringAiGateway(ObjectProvider<ChatModel> chatModelProvider, AiProperties properties) {
+    public SpringAiGateway(ObjectProvider<ChatModel> chatModelProvider,
+                           ObjectProvider<EmbeddingModel> embeddingModelProvider,
+                           AiProperties properties) {
         this.chatModelProvider = chatModelProvider;
+        this.embeddingModelProvider = embeddingModelProvider;
         this.properties = properties;
+    }
+
+    @Override
+    public List<float[]> embed(List<String> texts) {
+        if (texts == null || texts.isEmpty()) {
+            return List.of();
+        }
+        EmbeddingModel embeddingModel = requireEmbeddingModel();
+        try {
+            List<float[]> vectors = Mono.fromCallable(() -> embeddingModel.embed(texts))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .timeout(properties.timeoutOrDefault())
+                    .onErrorMap(this::mapError)
+                    .block();
+            return vectors == null ? List.of() : vectors;
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw mapError(ex);
+        }
     }
 
     @Override
@@ -113,6 +138,15 @@ public class SpringAiGateway implements AiGateway {
                     "未配置模型密钥：请设置环境变量 DASHSCOPE_API_KEY 后重启后端");
         }
         return chatModel;
+    }
+
+    private EmbeddingModel requireEmbeddingModel() {
+        EmbeddingModel embeddingModel = embeddingModelProvider.getIfAvailable();
+        if (embeddingModel == null) {
+            throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE,
+                    "未配置模型密钥：请设置环境变量 DASHSCOPE_API_KEY 后重启后端");
+        }
+        return embeddingModel;
     }
 
     private List<Message> toSpringMessages(AiChatRequest request) {
