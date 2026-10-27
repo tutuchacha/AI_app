@@ -429,9 +429,10 @@ defineExpose({ reset, restart, send, loadConversation })
 
 .panel-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px 14px;
   padding: 13px 18px;
   border-bottom: 1px solid var(--xy-line);
   background: #fff;
@@ -441,6 +442,7 @@ defineExpose({ reset, restart, send, loadConversation })
   display: flex;
   align-items: center;
   gap: 11px;
+  flex: 1 1 200px;
   min-width: 0;
 }
 
@@ -458,6 +460,7 @@ defineExpose({ reset, restart, send, loadConversation })
 }
 
 .who-text {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -465,14 +468,21 @@ defineExpose({ reset, restart, send, loadConversation })
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .name-row h2 {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font-size: 14.5px;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mode {
+  flex: 0 0 auto;
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--xy-mint-soft);
@@ -492,9 +502,14 @@ defineExpose({ reset, restart, send, loadConversation })
 
 .tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  flex: 0 0 auto;
+  margin-left: auto;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .live {
