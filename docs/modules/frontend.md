@@ -44,7 +44,7 @@ frontend/src/
 | `/companion` | 恋爱陪伴 | 3 张角色卡、人设开场、切换角色 |
 | `/support` | 智能客服 | 知识库卡片、引用来源、常见问题 |
 | `/knowledge` | 知识库 | 真实接口：建库、上传、状态轮询、检索测试 |
-| `/analysis` | 文档分析 | 真实接口：选库/文档、摘要/结构/追问、轮询、导出 |
+| `/analysis` | 文档分析 | 真实接口：选库/文档、摘要/结构/追问/要素、轮询、导出 |
 | `/dashboard` | 用量看板 | 指标卡、7 日柱状图、模块占比 |
 | `/settings` | 设置 | 模型参数、学习模式、环境清单 |
 
@@ -97,8 +97,8 @@ frontend/src/
 
 ### F0-09 知识库与文档分析
 - 文件：`KnowledgeView.vue`、`AnalysisView.vue`、`api/knowledge.ts`、`api/analysis.ts`
-- 关键：库 CRUD、上传后 1.5s 轮询 `PENDING→READY/FAILED`、重建、检索测试；分析页只列 READY 文档，按类型取最新一条，1.2s 轮询到 `READY/FAILED`，结果用内置 Markdown 渲染并导出
-- 验收：上传状态自动走到 READY；检索出片段带分数；聊天引用可点开看原文；三类分析都能出结果
+- 关键：库 CRUD、上传后 1.5s 轮询 `PENDING→READY/FAILED`、重建、检索测试；分析页只列 READY 文档，四类各取最新一条，1.2s 轮询到 `READY/FAILED`，结果用内置 Markdown（含表格）渲染并导出
+- 验收：上传状态自动走到 READY；检索出片段带分数；聊天引用可点开看原文；四类分析都能出结果
 
 ### F0-10 看板与设置
 - 文件：`DashboardView.vue`、`SettingsView.vue`

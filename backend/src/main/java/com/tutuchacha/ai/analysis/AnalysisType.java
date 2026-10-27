@@ -6,7 +6,7 @@ import com.tutuchacha.ai.common.ErrorCode;
 import java.util.Locale;
 
 /**
- * 三种分析任务及其提示词。枚举名直接落库，对外契约只认这三个值。
+ * 四种分析任务及其提示词。枚举名直接落库，对外契约只认这四个值。
  * 提示词集中在这里，调整输出格式不用改调度与服务代码。
  */
 public enum AnalysisType {
@@ -24,7 +24,13 @@ public enum AnalysisType {
     QUESTIONS("追问", """
             请生成 6~8 个用于深入理解或评审该文档的中文追问，使用 Markdown 有序列表。
             每个问题单独一行，下一行用「考察点：」说明该问题想验证什么。
-            问题要具体到文档内容，避免泛泛而谈。""");
+            问题要具体到文档内容，避免泛泛而谈。"""),
+
+    FIELDS("要素", """
+            请抽取文档中的结构化要素，使用 Markdown 表格输出，表头固定为：
+            | 要素 | 内容 | 原文依据 |
+            优先关注：主体或对象、金额或数量、时间与期限、关键结论或待办。
+            只写正文出现的信息，没有的写「未提及」，不要编造；最多 10 行。""");
 
     private final String label;
     private final String instruction;
@@ -45,13 +51,13 @@ public enum AnalysisType {
     /** 接收前端字符串，大小写不敏感；为空或未知类型一律 400。 */
     public static AnalysisType parse(String raw) {
         if (raw == null || raw.isBlank()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "type 必填：SUMMARY / OUTLINE / QUESTIONS");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "type 必填：SUMMARY / OUTLINE / QUESTIONS / FIELDS");
         }
         try {
             return valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
-                    "不支持的 type：" + raw + "，可选 SUMMARY / OUTLINE / QUESTIONS");
+                    "不支持的 type：" + raw + "，可选 SUMMARY / OUTLINE / QUESTIONS / FIELDS");
         }
     }
 }

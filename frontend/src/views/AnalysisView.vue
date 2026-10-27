@@ -13,6 +13,7 @@ import {
   List,
   MagicStick,
   Refresh,
+  Tickets,
 } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
 import {
@@ -45,12 +46,14 @@ const TYPE_LABELS: Record<AnalysisType, string> = {
   SUMMARY: '摘要',
   OUTLINE: '结构',
   QUESTIONS: '追问',
+  FIELDS: '要素',
 }
 
 const typeCards = [
   { type: 'SUMMARY' as const, label: '摘要', desc: '3~6 句话概括文档目的与结论', icon: Document },
   { type: 'OUTLINE' as const, label: '结构', desc: '按章节抽取层级与关键要点', icon: List },
   { type: 'QUESTIONS' as const, label: '追问', desc: '生成评审与深挖问题清单', icon: ChatDotRound },
+  { type: 'FIELDS' as const, label: '要素', desc: '抽取主体、金额、期限等字段', icon: Tickets },
 ]
 
 const knowledgeBases = ref<KnowledgeBase[]>([])
@@ -79,6 +82,7 @@ const latestByType = computed<Record<AnalysisType, AnalysisTask | undefined>>(()
     SUMMARY: undefined,
     OUTLINE: undefined,
     QUESTIONS: undefined,
+    FIELDS: undefined,
   }
   for (const task of analyses.value) {
     if (!map[task.type]) map[task.type] = task
@@ -87,7 +91,7 @@ const latestByType = computed<Record<AnalysisType, AnalysisTask | undefined>>(()
 })
 
 const tabs = computed(() =>
-  (['SUMMARY', 'OUTLINE', 'QUESTIONS'] as const).map((item) => ({
+  (['SUMMARY', 'OUTLINE', 'QUESTIONS', 'FIELDS'] as const).map((item) => ({
     type: item,
     label: TYPE_LABELS[item],
     task: latestByType.value[item],
@@ -376,13 +380,14 @@ function errorText(cause: unknown, fallback: string) {
 }
 
 /**
- * 极简 Markdown：标题 / 无序 / 有序 / 引用 / 粗体 / 行内代码。
+ * 极简 Markdown：标题 / 无序 / 有序 / 引用 / 表格 / 粗体 / 行内代码。
  * 先转义再拼标签，结果通过 v-html 渲染，避免模型输出带入 HTML。
  */
 function renderMarkdown(markdown: string) {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n')
   const html: string[] = []
   let list: 'ul' | 'ol' | null = null
+  let table: string[][] | null = null
 
   const closeList = () => {
     if (!list) return
@@ -390,12 +395,46 @@ function renderMarkdown(markdown: string) {
     list = null
   }
 
+  const closeTable = () => {
+    if (!table) return
+    const [head, ...body] = table
+    table = null
+    html.push(
+      '<table><thead><tr>' +
+        head.map((cell) => `<th>${inline(cell)}</th>`).join('') +
+        '</tr></thead><tbody>' +
+        body
+          .map((row) => '<tr>' + row.map((cell) => `<td>${inline(cell)}</td>`).join('') + '</tr>')
+          .join('') +
+        '</tbody></table>',
+    )
+  }
+
+  const closeBlocks = () => {
+    closeList()
+    closeTable()
+  }
+
   for (const raw of lines) {
     const line = raw.trim()
     if (!line) {
-      closeList()
+      closeBlocks()
       continue
     }
+    if (line.startsWith('|')) {
+      closeList()
+      const cells = line
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map((cell) => cell.trim())
+      // 跳过 |---|:---| 这类分隔行
+      if (cells.every((cell) => /^:?-{3,}:?$/.test(cell))) continue
+      table ??= []
+      table.push(cells)
+      continue
+    }
+    closeTable()
     let match = /^(#{1,4})\s+(.*)$/.exec(line)
     if (match) {
       closeList()
@@ -438,7 +477,7 @@ function renderMarkdown(markdown: string) {
     closeList()
     html.push(`<p>${inline(line)}</p>`)
   }
-  closeList()
+  closeBlocks()
   return html.join('')
 }
 
@@ -461,16 +500,21 @@ function escapeHtml(text: string) {
 <template>
   <div class="page">
     <LearningNote
-      title="文档分析的三层能力"
-      :points="['摘要：快速判断文档讲了什么', '结构：还原章节层级与关键要点', '追问：生成评审问题与考察点']"
-      next="M3：结果支持导出 Markdown，后续再补字段抽取"
+      title="文档分析的四类结果"
+      :points="[
+        '摘要：快速判断文档讲了什么',
+        '结构：还原章节层级与关键要点',
+        '追问：生成评审问题与考察点',
+        '要素：抽取主体、金额、期限等字段',
+      ]"
+      next="M3：四类结果都支持导出 Markdown"
     />
 
     <div class="page-head">
       <div>
         <h1 class="page-title">文档分析</h1>
         <p class="page-subtitle">
-          选一份知识库里的 READY 文档，生成摘要、结构或追问；任务后台执行，可随时回来查看。
+          选一份知识库里的 READY 文档，生成摘要、结构、追问或要素；任务后台执行，可随时回来查看。
         </p>
       </div>
       <span class="pill coral">
@@ -657,6 +701,7 @@ function escapeHtml(text: string) {
             <li>摘要：快速了解文档讲了什么</li>
             <li>结构：还原章节层级与要点</li>
             <li>追问：生成评审问题与考察点</li>
+            <li>要素：抽取主体、金额与期限</li>
           </ul>
         </div>
 
@@ -837,7 +882,7 @@ function escapeHtml(text: string) {
 
 .type-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
   gap: 8px;
 }
 
@@ -959,7 +1004,7 @@ function escapeHtml(text: string) {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 5px;
 }
@@ -1231,6 +1276,33 @@ function escapeHtml(text: string) {
   margin: 2px 0 10px;
   color: var(--xy-violet);
   font-size: 11.5px;
+}
+
+.markdown :deep(table) {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.markdown :deep(th),
+.markdown :deep(td) {
+  padding: 6px 8px;
+  border: 1px solid #eceef5;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.6;
+}
+
+.markdown :deep(th) {
+  background: #fafbfe;
+  color: var(--xy-ink);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.markdown :deep(td:last-child) {
+  color: var(--xy-muted);
 }
 
 @keyframes slide {

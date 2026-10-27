@@ -3,17 +3,17 @@
 > 仪表盘：只写当前，≤35 行 / 1.8k 字符。历史去 progress，决策去 ADR。
 
 - 更新时间：2026-10-27
-- 阶段：**M3-01 文档分析完成**（后端三类任务 + 前端分析页 + 真库真实模型验证）；下一步 M3 收尾
-- 数据库：Flyway `V1`~`V6 document analysis` 已执行（本机 MySQL 已迁移到 v6）
+- 阶段：**M3 文档分析完成**（摘要 / 结构 / 追问 / 要素四类，真库真实模型验证）；下一步见下
+- 数据库：Flyway `V1`~`V7 analysis fields` 已执行（本机 MySQL 已迁移到 v7）
 - 鉴权：BCrypt + JWT（HS256，2h）；`SecurityConfig` 放行 `ASYNC/ERROR` 与 `/ws/**`
 - 模型：百炼 `qwen-plus`；向量 `text-embedding-v3`（1024 维）；超时默认 60s
 - 远程：`git@github.com:tutuchacha/AI_app.git`
 
 ## 下一步（按顺序）
 
-1. **M3 收尾**：字段抽取（合同金额/期限等）是否要做，待用户确认
-2. 装 Docker 后跑 `ops/docker-compose.yml`，确认 Grafana 看板
-3. 聊天选库增强（解绑、多库同检）待用户确认后再排
+1. 装 Docker 后跑 `ops/docker-compose.yml`，确认 Grafana 看板
+2. 聊天选库增强（解绑、多库同检）待用户确认后再排
+3. M4 内容待用户确认
 
 ## 已完成
 
@@ -23,7 +23,8 @@
 - M2-01~05：知识库 CRUD、解析切片、向量回填、检索 + 聊天接 RAG（引用事件与落库）
 - M3-01：`document_analysis` 表 + 摘要/结构/追问（异步 Worker、复用进行中任务、级联删除）；
   分析页选库选文档、三 Tab、轮询、重试、导出 Markdown
-- 验证：后端 111 测试通过；浏览器真库三类分析全部 READY（qwen-plus，4.0s / 6.0s / 19.0s）
+- M3-02：要素抽取 `FIELDS`（三列表 + 原文依据，V7 改列注释）；四卡四 Tab、Markdown 表格渲染
+- 验证：后端 111 测试通过；浏览器真库四类分析全部 READY（qwen-plus，3.98s / 5.97s / 18.99s / 10.06s）
 
 ## 阻塞
 

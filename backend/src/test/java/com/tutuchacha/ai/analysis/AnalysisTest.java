@@ -98,18 +98,21 @@ class AnalysisTest {
 
         create(fixture.documentId(), "OUTLINE");
         create(fixture.documentId(), "QUESTIONS");
+        create(fixture.documentId(), "FIELDS");
 
         ArgumentCaptor<AiChatRequest> captor = ArgumentCaptor.forClass(AiChatRequest.class);
-        verify(aiGateway, org.mockito.Mockito.times(2)).complete(captor.capture());
+        verify(aiGateway, org.mockito.Mockito.times(3)).complete(captor.capture());
         assertThat(captor.getAllValues().get(0).messages().get(0).content()).contains("章节结构", "Markdown");
         assertThat(captor.getAllValues().get(1).messages().get(0).content()).contains("追问", "考察点");
+        assertThat(captor.getAllValues().get(2).messages().get(0).content()).contains("表格", "原文依据", "未提及");
 
         mockMvc.perform(get("/api/documents/" + fixture.documentId() + "/analysis")
                         .with(user(DEMO).roles("USER")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(2))
-                .andExpect(jsonPath("$.data[0].type").value("QUESTIONS"))
-                .andExpect(jsonPath("$.data[1].type").value("OUTLINE"));
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[0].type").value("FIELDS"))
+                .andExpect(jsonPath("$.data[1].type").value("QUESTIONS"))
+                .andExpect(jsonPath("$.data[2].type").value("OUTLINE"));
     }
 
     @Test

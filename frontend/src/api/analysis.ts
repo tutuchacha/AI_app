@@ -1,6 +1,6 @@
 import { request } from './http'
 
-export type AnalysisType = 'SUMMARY' | 'OUTLINE' | 'QUESTIONS'
+export type AnalysisType = 'SUMMARY' | 'OUTLINE' | 'QUESTIONS' | 'FIELDS'
 export type AnalysisStatus = 'PENDING' | 'RUNNING' | 'READY' | 'FAILED'
 
 export interface AnalysisTask {
