@@ -6,8 +6,8 @@
 ## 0. 速览
 
 - 目标：知识库 → 文档上传解析 → 切片向量化 → 检索 → 聊天带 `citation` 事件
-- 当前：M2-03 完成（切片已向量化落库）；下一步 M2-04 检索
-- 代码：`knowledge/`（`KnowledgeBase*`、`Document*`、`TextChunker`、`DocumentTextExtractor`）
+- 当前：M2-04 完成（余弦检索 + `/search`）；下一步 M2-05 聊天接 RAG
+- 代码：`knowledge/`（`KnowledgeBase*`、`Document*`、`TextChunker`、`RetrievalService`、`CosineSimilarity`）
 - 验收：登录后建库 → 列表可见 → 改/删生效；别人的库 403、不存在 404
 - 表：`knowledge_base` / `document` / `document_chunk`
 
@@ -33,7 +33,7 @@
 | DELETE | `/api/knowledge-bases/{id}` | 级联删文档与切片 | ✅ M2-01 |
 | POST | `/api/knowledge-bases/{id}/documents` | 上传文档：multipart `file`，≤20MB，返回 `PENDING` |
 | GET/DELETE | `/api/documents/{id}` | 详情（含 `status`/`chunkCount`）/ 删除；`POST .../reindex` 重建 |
-| POST | `/api/knowledge-bases/{id}/search` | 检索调试，返回 chunk + score | ⏳ M2-04 |
+| POST | `/api/knowledge-bases/{id}/search` | 检索调试，返回 chunk + score | ✅ M2-04 |
 
 - 校验：`chunk_size` 100–4000，`chunk_overlap` 0–2000 且必须小于 `chunk_size`；默认 800 / 120。
 - 归属：所有接口只看当前用户，越权一律 403；库不存在 404。
@@ -45,11 +45,13 @@
 | M2-01 | `V4` 建表 + 知识库 CRUD | ✅ |
 | M2-02 | 上传（pdf/docx/txt/md、≤20MB）+ 解析 + 切片落库 | ✅ |
 | M2-03 | Embedding 批量化 + `embedding` 回填 + 重建索引 | ✅ |
-| M2-04 | 检索（topK=6、相似度阈值）+ `/search` 调试接口 | ⏳ |
+| M2-04 | 检索（topK=6、相似度阈值）+ `/search` 调试接口 | ✅ |
 | M2-05 | 聊天接 RAG：拼 Prompt、`citation` 事件、前端引用展示 | ⏳ |
 
 ## 4. 约束与坑
 
+- 检索：问题向量化后与库内切片算余弦相似度，按 `app.rag.min-score`（默认 0.2）过滤、`app.rag.top-k`（默认 6）截断
+- 检索只加载该库最近 5000 片；`embedding` 为空、JSON 损坏或维度与问题向量不一致的切片直接跳过，不让脏数据拖垮请求
 - 向量：`AiGateway.embed(List)` 走百炼 `text-embedding-v3`（`app.ai.embedding-model`），按 `app.rag.embedding-batch-size`（默认 10）分批
 - 先全部向量化成功再落切片：任一批失败整篇标 `FAILED`，不留下半套切片；重建索引会重算向量
 - 文档 `READY` 即「文本已切 + 向量已齐」；无密钥时执行失败并提示 `DASHSCOPE_API_KEY`

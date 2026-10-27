@@ -105,3 +105,6 @@ app:
     async: ${RAG_ASYNC:true}
     # 单次向量请求的切片数（百炼 v3 单批上限 10）
     embedding-batch-size: ${RAG_EMBEDDING_BATCH:10}
+    # 检索默认返回片数与相似度下限（低于阈值的切片直接丢弃）
+    top-k: ${RAG_TOP_K:6}
+    min-score: ${RAG_MIN_SCORE:0.2}

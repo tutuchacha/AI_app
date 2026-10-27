@@ -3,7 +3,7 @@
 > 仪表盘：只写当前，≤35 行 / 1.8k 字符。历史去 progress，决策去 ADR。
 
 - 更新时间：2026-10-27
-- 阶段：**M2 RAG 进行中**（M1 已完成；M2-01/02/03 完成）
+- 阶段：**M2 RAG 进行中**（M1 已完成；M2-01~04 完成）
 - 数据库：Flyway `V1`~`V4 rag` 已执行（本机 MySQL 已迁移到 v4）
 - 鉴权：BCrypt + JWT（HS256，2h）；`SecurityConfig` 放行 `ASYNC/ERROR` 与 `/ws/**`
 - 模型：百炼 `qwen-plus`；向量 `text-embedding-v3`（1024 维）；超时默认 60s
@@ -11,9 +11,9 @@
 
 ## 下一步（按顺序）
 
-1. **M2-04 检索**：余弦相似度 + topK（默认 6）+ 相似度阈值，`/api/knowledge-bases/{id}/search` 调试接口
-2. M2-05：聊天带 `citation` 事件（检索片段注入 Prompt）
-3. 装 Docker 后跑 `ops/docker-compose.yml`，确认 Grafana 看板
+1. **M2-05 聊天接 RAG**：检索片段拼 Prompt、SSE 新增 `citation` 事件、前端引用展示
+2. 装 Docker 后跑 `ops/docker-compose.yml`，确认 Grafana 看板
+3. M3 前端页面（知识库管理 + 引用展示）等用户确认框架后再排
 
 ## 已完成
 
@@ -22,8 +22,9 @@
 - M1-10：容器化部署件（Dockerfile / nginx / compose）— 本机无 Docker，未实跑
 - M2-01：`V4__rag.sql` 三张表；`knowledge/` 知识库 CRUD，归属与切片参数校验
 - M2-02：文档上传（Tika 解析、≤20MB、sha256 去重）+ 切片落库 + 删除/重建；解析异步
-- M2-03：`AiGateway.embed` + 百炼向量批量回填 `document_chunk.embedding`（JSON 数组），`READY` 即向量齐备
-- 验证：77 后端测试通过；真库（8081）上传→READY 4 片，4 条向量均 1024 维
+- M2-03：`AiGateway.embed` + 百炼向量批量回填 `document_chunk.embedding`，`READY` 即向量齐备
+- M2-04：余弦相似度检索 + 阈值/topK + `POST /api/knowledge-bases/{id}/search`
+- 验证：93 后端测试通过；真库（8081）检索冒烟：年假/报销各命中正确切片（0.75 / 0.73），阈值 0.99 返回空
 
 ## 阻塞
 

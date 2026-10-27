@@ -9,7 +9,9 @@ public record RagProperties(
         String uploadDir,
         DataSize maxFileSize,
         Boolean async,
-        Integer embeddingBatchSize
+        Integer embeddingBatchSize,
+        Integer topK,
+        Double minScore
 ) {
 
     public String uploadDirOrDefault() {
@@ -28,5 +30,15 @@ public record RagProperties(
     /** 单次向量请求的切片数，百炼 text-embedding-v3 单批上限 10。 */
     public int embeddingBatchSizeOrDefault() {
         return embeddingBatchSize == null || embeddingBatchSize < 1 ? 10 : embeddingBatchSize;
+    }
+
+    /** 检索默认返回片数。 */
+    public int topKOrDefault() {
+        return topK == null || topK < 1 ? 6 : Math.min(topK, 20);
+    }
+
+    /** 检索默认相似度下限，低于该值的切片直接丢弃。 */
+    public double minScoreOrDefault() {
+        return minScore == null ? 0.2d : minScore;
     }
 }
