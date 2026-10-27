@@ -1,4 +1,5 @@
 import { request } from './http'
+import type { Citation } from '@/types/chat'
 
 export interface ConversationSummary {
   uid: string
@@ -16,6 +17,8 @@ export interface ConversationMessage {
   tokensOut: number
   latencyMs: number
   model: string
+  /** 回答引用的知识库片段，刷新后由后端 citation_json 还原 */
+  citations: Citation[]
   createdAt: string
 }
 
@@ -23,6 +26,8 @@ export interface ConversationDetail {
   uid: string
   title: string
   module: string
+  /** 会话绑定的知识库，未绑定为 null */
+  kbId: number | null
   messages: ConversationMessage[]
 }
 

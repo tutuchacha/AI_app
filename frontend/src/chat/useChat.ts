@@ -53,7 +53,7 @@ export function useChat(options: UseChatOptions) {
   let controller: AbortController | null = null
   const conversationId = ref(USE_MOCK ? createId('local') : '')
 
-  async function send(content: string, model?: string) {
+  async function send(content: string, model?: string, kbId?: number) {
     const text = content.trim()
     if (!text || streaming.value) return
 
@@ -66,11 +66,11 @@ export function useChat(options: UseChatOptions) {
       createdAt: Date.now(),
     })
 
-    await runStream(text, model, false)
+    await runStream(text, model, false, kbId)
   }
 
   /** 重试上一条失败/被停止的回答：保留提问，丢掉半截回答后重新生成 */
-  async function retry(model?: string) {
+  async function retry(model?: string, kbId?: number) {
     if (streaming.value) return
     let index = -1
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
@@ -85,10 +85,10 @@ export function useChat(options: UseChatOptions) {
     if (!question || question.role !== 'user') return
 
     messages.value.splice(index)
-    await runStream(question.content, model, true)
+    await runStream(question.content, model, true, kbId)
   }
 
-  async function runStream(text: string, model: string | undefined, isRetry: boolean) {
+  async function runStream(text: string, model: string | undefined, isRetry: boolean, kbId?: number) {
     error.value = ''
     lastLatency.value = null
     lastUsage.value = null
@@ -119,6 +119,7 @@ export function useChat(options: UseChatOptions) {
           personaId: options.personaId,
           model: model || undefined,
           retry: isRetry || undefined,
+          kbId,
         },
         {
           onMeta: (event) => {

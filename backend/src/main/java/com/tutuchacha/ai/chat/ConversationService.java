@@ -169,7 +169,7 @@ public class ConversationService {
                         row.getModel(), readCitations(row.getCitationJson()), iso(row.getCreatedAt())))
                 .toList();
         return new ConversationDetail(conversation.getUid(), conversation.getTitle(),
-                conversation.getModule(), messages);
+                conversation.getModule(), conversation.getKbId(), messages);
     }
 
     private User findUser(String username) {

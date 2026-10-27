@@ -34,6 +34,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -141,6 +142,7 @@ class ChatRagTest {
         MvcResult result = mockMvc.perform(get("/api/conversations/" + uid)
                         .with(user(DEMO).roles("USER")))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.kbId").value(library.kbId()))
                 .andExpect(jsonPath("$.data.messages[1].role").value("assistant"))
                 .andExpect(jsonPath("$.data.messages[1].citations[0].id").value(String.valueOf(library.chunkId())))
                 .andExpect(jsonPath("$.data.messages[1].citations[0].title").value("员工手册.txt"))
@@ -213,6 +215,25 @@ class ChatRagTest {
         ArgumentCaptor<AiChatRequest> captor = ArgumentCaptor.forClass(AiChatRequest.class);
         verify(aiGateway).stream(captor.capture());
         assertThat(captor.getValue().messages().get(0).content()).doesNotContain("参考资料");
+    }
+
+    @Test
+    void deletingKnowledgeBaseUnbindsConversation() throws Exception {
+        Library library = seedLibrary(DEMO);
+        String uid = conversationIdOf(streamBody("{\"content\":\"年假有几天\",\"kbId\":" + library.kbId() + "}"));
+
+        mockMvc.perform(delete("/api/knowledge-bases/" + library.kbId())
+                        .with(user(DEMO).roles("USER")))
+                .andExpect(status().isOk());
+
+        MvcResult detail = mockMvc.perform(get("/api/conversations/" + uid)
+                        .with(user(DEMO).roles("USER")))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode kbId = objectMapper.readTree(detail.getResponse().getContentAsString())
+                .path("data").path("kbId");
+        // 全局序列化忽略 null，所以这里要么缺失、要么显式 null
+        assertThat(kbId.isMissingNode() || kbId.isNull()).as("删库后会话应解绑").isTrue();
     }
 
     private int messageCount(String username) {

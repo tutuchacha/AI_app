@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
-import type { ChatMode } from '@/types/chat'
+import type { ChatMessage, ChatMode } from '@/types/chat'
 import type { Persona } from '@/data/personas'
+import { listKnowledgeBases } from '@/api/knowledge'
+import type { KnowledgeBase } from '@/api/knowledge'
 import { useChat } from '@/chat/useChat'
 import MessageItem from './MessageItem.vue'
 import ChatComposer from './ChatComposer.vue'
@@ -54,6 +56,10 @@ const emit = defineEmits<{ changed: [uid: string] }>()
 const model = ref('qwen-plus')
 const listRef = ref<HTMLElement>()
 const composerRef = ref<InstanceType<typeof ChatComposer>>()
+const bases = ref<KnowledgeBase[]>([])
+const kbId = ref(0)
+const kbPickerVisible = computed(() => props.mode === 'chat')
+const activeKb = computed(() => bases.value.find((item) => item.id === kbId.value) ?? null)
 
 const displayTitle = computed(() => props.title || props.persona?.name || '新对话')
 const displaySubtitle = computed(() => {
@@ -156,12 +162,12 @@ function jumpTo(id: string) {
 function pick(text: string) {
   if (streaming.value) return
   stickToBottom.value = true
-  void send(text, model.value).then(() => emit('changed', conversationId.value))
+  void send(text, model.value, kbId.value || undefined).then(() => emit('changed', conversationId.value))
 }
 
 function handleSend(text: string) {
   stickToBottom.value = true
-  void send(text, model.value).then(() => emit('changed', conversationId.value))
+  void send(text, model.value, kbId.value || undefined).then(() => emit('changed', conversationId.value))
 }
 
 /** 最后一条是失败/停止的回答时给出重试入口 */
@@ -173,7 +179,7 @@ const canRetry = computed(() => {
 function handleRetry() {
   if (streaming.value) return
   stickToBottom.value = true
-  void retry(model.value).then(() => emit('changed', conversationId.value))
+  void retry(model.value, kbId.value || undefined).then(() => emit('changed', conversationId.value))
 }
 
 /** 后端历史 → 组件消息；status 用大写存储，这里转成前端的小写 */
@@ -182,23 +188,26 @@ function toChatMessage(row: {
   role: 'user' | 'assistant'
   content: string
   status: string
+  citations?: ChatMessage['citations']
   createdAt: string
 }) {
   return {
     id: String(row.id),
     role: row.role,
     content: row.content,
-    citations: [],
+    citations: row.citations ?? [],
     status: row.status === 'STOPPED' ? ('stopped' as const) : ('done' as const),
     createdAt: Date.parse(row.createdAt) || Date.now(),
   }
 }
 
-/** 切会话/刷新后恢复历史 */
+/** 切会话/刷新后恢复历史；会话绑定的知识库一并回填到选择器 */
 function loadConversation(detail: {
   uid: string
+  kbId?: number | null
   messages: Parameters<typeof toChatMessage>[0][]
 }) {
+  kbId.value = detail.kbId ?? 0
   hydrate(detail.uid, detail.messages.map(toChatMessage))
   stickToBottom.value = true
   nextTick(() => pinToBottom())
@@ -220,8 +229,20 @@ watch(
 )
 let contentObserver: MutationObserver | null = null
 
+/** 知识库列表：只在通用聊天下拉；失败时静默降级为「不指定」 */
+async function loadBases() {
+  if (!kbPickerVisible.value) return
+  try {
+    bases.value = await listKnowledgeBases()
+    if (kbId.value && !bases.value.some((item) => item.id === kbId.value)) kbId.value = 0
+  } catch {
+    bases.value = []
+  }
+}
+
 onMounted(() => {
   scrollToBottom()
+  void loadBases()
   const el = listRef.value
   if (!el) return
   // 内容异步撑高（图片/字体/重新挂载）时，若仍「贴底」就继续贴底
@@ -242,6 +263,7 @@ onActivated(() => {
   pinToBottom()
   nextTick(updateActive)
   window.setTimeout(updateActive, 240)
+  void loadBases()
 })
 
 defineExpose({ reset, restart, send, loadConversation })
@@ -284,6 +306,18 @@ defineExpose({ reset, restart, send, loadConversation })
             WS
           </button>
         </div>
+        <el-select
+          v-if="kbPickerVisible"
+          v-model="kbId"
+          size="small"
+          class="kb-select"
+          :disabled="streaming"
+          placeholder="不指定知识库"
+          title="选中后检索该库；不指定时沿用会话已绑定的库"
+        >
+          <el-option :value="0" label="不指定知识库" />
+          <el-option v-for="item in bases" :key="item.id" :label="item.name" :value="item.id" />
+        </el-select>
         <el-select v-model="model" size="small" class="model-select" :disabled="streaming">
           <el-option label="qwen-plus" value="qwen-plus" />
           <el-option label="qwen-turbo" value="qwen-turbo" />
@@ -369,6 +403,7 @@ defineExpose({ reset, restart, send, loadConversation })
 
     <div class="panel-foot">
       <span>{{ transportName === 'ws' ? 'WS 持久连接' : transportName + ' transport' }}</span>
+      <span v-if="activeKb">知识库 · {{ activeKb.name }}</span>
       <span v-if="transportStats && transportStats.handshakes">
         握手 {{ transportStats.handshakes }} 次 · 复用 {{ transportStats.rounds }} 轮
       </span>
@@ -492,6 +527,10 @@ defineExpose({ reset, restart, send, loadConversation })
 
 .model-select {
   width: 132px;
+}
+
+.kb-select {
+  width: 150px;
 }
 
 .transport-switch {
@@ -757,6 +796,7 @@ defineExpose({ reset, restart, send, loadConversation })
 
 @media (max-width: 820px) {
   .model-select,
+  .kb-select,
   .live {
     display: none;
   }

@@ -73,6 +73,7 @@ export class WsChatTransport implements ChatTransport {
         module: request.mode,
         model: request.model,
         retry: request.retry,
+        kbId: request.kbId,
       })
       if (!sent) {
         this.finish(new Error('WebSocket 连接已断开，请重试'))

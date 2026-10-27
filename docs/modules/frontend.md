@@ -8,8 +8,8 @@
 - 启动：`cd frontend; npm install; npm run dev` → http://127.0.0.1:5173
 - 结构：`api/`（请求与 token）、`chat/`（SSE/Mock 传输 + 状态）、`components/chat/`（UI）
 - 关键：`ChatTransport` 契约、`useChat` 状态机、`SseChatTransport` 切帧解析
-- 已完成：M0 页面 + 真实登录；M1-04 默认 SSE，`VITE_USE_MOCK=true` 可离线
-- 下一步：M1-05 会话列表与历史从数据库恢复
+- 已完成：M0 页面 + 真实登录；M1 全链真实（SSE/WS、会话恢复）；M2 知识库页与聊天选库接真实接口
+- 下一步：M3 文档分析页（页面形态待用户确认）
 - 改哪个页面，再跳到对应步骤，不从头读
 
 ## 1. 目录职责
@@ -43,7 +43,7 @@ frontend/src/
 | `/chat` | 对话 | 会话列表、流式输出、停止、耗时 |
 | `/companion` | 恋爱陪伴 | 3 张角色卡、人设开场、切换角色 |
 | `/support` | 智能客服 | 知识库卡片、引用来源、常见问题 |
-| `/knowledge` | 知识库 | 知识库/文档表格、状态标签、上传入口 |
+| `/knowledge` | 知识库 | 真实接口：建库、上传、状态轮询、检索测试 |
 | `/analysis` | 文档分析 | 拖拽上传、模拟进度、结构化结果 |
 | `/dashboard` | 用量看板 | 指标卡、7 日柱状图、模块占比 |
 | `/settings` | 设置 | 模型参数、学习模式、环境清单 |
@@ -96,9 +96,9 @@ frontend/src/
 - 验收：切换角色后开场白和配色变化；客服回答带引用卡片
 
 ### F0-09 知识库与文档分析
-- 文件：`KnowledgeView.vue`、`AnalysisView.vue`
-- 关键：状态标签、表格布局、拖拽上传、模拟进度清理（`onBeforeUnmount`）
-- 验收：上传后显示文件名；分析进度到 100% 出现示例结果
+- 文件：`KnowledgeView.vue`、`AnalysisView.vue`、`api/knowledge.ts`
+- 关键：库 CRUD、上传后 1.5s 轮询 `PENDING→READY/FAILED`、重建、检索测试；聊天页顶部选库透传 `kbId`
+- 验收：做完上传状态自动走到 READY；检索出片段带分数；聊天引用可点开看原文
 
 ### F0-10 看板与设置
 - 文件：`DashboardView.vue`、`SettingsView.vue`
@@ -132,8 +132,7 @@ frontend/src/
 
 ## 5. 已知限制
 
-- 消息只在内存，刷新丢失（M1-05 落库后解决）。
-- 会话列表、历史会话仍是前端 Mock 数据（M1-05）。
-- 知识库、分析结果、看板均为示例数据。
+- `/analysis`、`/dashboard`、`/settings` 仍为示例数据。
+- 聊天选库不支持解绑与多库同检；`el-option` 的 value 不能为 `null`，「不指定」用 `0` 哨兵。
 - 暂无 Markdown 渲染、代码高亮、虚拟滚动。
 - Element Plus 全量引入，首包约 1MB；后续按需引入优化。

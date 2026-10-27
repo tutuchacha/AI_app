@@ -51,7 +51,9 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   const headers = new Headers(options.headers)
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  if (options.body && !headers.has('Content-Type')) {
+  // FormData 由浏览器自己带 boundary，不能手写 Content-Type
+  const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData
+  if (options.body && !isForm && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 

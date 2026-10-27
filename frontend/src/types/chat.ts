@@ -26,6 +26,8 @@ export interface ChatRequest {
   model?: string
   /** 重试上一轮失败的回答：后端不再插入新的 user 消息 */
   retry?: boolean
+  /** 知识库 ID：带上则检索片段注入提示词并返回 citation；会话会记住这个库 */
+  kbId?: number
 }
 
 export type FinishReason = 'stop' | 'length' | 'stopped'

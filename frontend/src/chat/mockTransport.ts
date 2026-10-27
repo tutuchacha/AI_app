@@ -65,6 +65,20 @@ function buildReply(request: ChatRequest): MockReply {
     }
   }
 
+  if (request.kbId) {
+    return {
+      text: `我在你选择的知识库里找到了这段资料，先按它回答「${quote}」：\n\n· 入职满一年享有 5 天带薪年假，满三年 10 天，满五年 15 天。\n· 年假需提前三个工作日在系统提交申请，由直属主管审批。\n\n这是 Mock 通道的示例引用，用来验证「选库 → citation 卡片 → 回答」这条链路；接入真实后端后，片段和分数都来自检索结果。`,
+      citations: [
+        {
+          id: 'chunk-demo',
+          title: '员工手册.txt',
+          snippet: '员工年假规定：入职满一年享有 5 天带薪年假，满三年 10 天，满五年 15 天。',
+          score: 0.78,
+        },
+      ],
+    }
+  }
+
   return {
     text: `我把「${quote}」拆成三步来看：\n\n1. 先确认目标：你希望得到一个答案，还是一个可以执行的下一步？\n2. 再补上下文：现在有哪些已知条件，哪些只是猜测？\n3. 最后做小实验：选一个成本最低的动作，验证完再调整。\n\n这是 M0 的 Mock 回复，重点不是答案本身，而是演示 meta → delta → done 的流式事件。M1 接入 Spring AI 后，由后端产生同样的事件流，这个页面不需要改。`,
     citations: [],
@@ -86,14 +100,14 @@ export class MockChatTransport implements ChatTransport {
 
     await wait(220, signal)
 
-    for (const chunk of chunkText(reply.text)) {
-      handlers.onDelta(chunk)
-      await wait(18, signal)
-    }
-
     for (const citation of reply.citations) {
       handlers.onCitation?.(citation)
       await wait(40, signal)
+    }
+
+    for (const chunk of chunkText(reply.text)) {
+      handlers.onDelta(chunk)
+      await wait(18, signal)
     }
 
     handlers.onUsage?.({

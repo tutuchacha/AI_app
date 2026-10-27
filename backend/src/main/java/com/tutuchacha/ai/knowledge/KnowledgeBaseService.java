@@ -3,6 +3,8 @@ package com.tutuchacha.ai.knowledge;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.tutuchacha.ai.common.BusinessException;
 import com.tutuchacha.ai.common.ErrorCode;
+import com.tutuchacha.ai.chat.Conversation;
+import com.tutuchacha.ai.chat.ConversationMapper;
 import com.tutuchacha.ai.knowledge.dto.KnowledgeBaseRequest;
 import com.tutuchacha.ai.knowledge.dto.KnowledgeBaseView;
 import com.tutuchacha.ai.user.User;
@@ -31,10 +33,13 @@ public class KnowledgeBaseService {
 
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final UserMapper userMapper;
+    private final ConversationMapper conversationMapper;
 
-    public KnowledgeBaseService(KnowledgeBaseMapper knowledgeBaseMapper, UserMapper userMapper) {
+    public KnowledgeBaseService(KnowledgeBaseMapper knowledgeBaseMapper, UserMapper userMapper,
+                                ConversationMapper conversationMapper) {
         this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.userMapper = userMapper;
+        this.conversationMapper = conversationMapper;
     }
 
     public List<KnowledgeBaseView> list(String username) {
@@ -83,6 +88,10 @@ public class KnowledgeBaseService {
     @Transactional
     public void delete(String username, Long id) {
         knowledgeBaseMapper.deleteById(requireOwned(username, id).getId());
+        // 聊天会话绑定过这个库的一并解绑，避免留下指向已删库的 kb_id
+        conversationMapper.update(null, Wrappers.<Conversation>lambdaUpdate()
+                .eq(Conversation::getKbId, id)
+                .set(Conversation::getKbId, null));
     }
 
     /** 文档增删后维护冗余计数，最小保护到 0。 */

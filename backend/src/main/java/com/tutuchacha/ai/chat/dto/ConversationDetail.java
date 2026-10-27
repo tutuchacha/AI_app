@@ -16,6 +16,9 @@ public record ConversationDetail(
         @Schema(description = "业务模块", example = "chat")
         String module,
 
+        @Schema(description = "会话绑定的知识库 ID，未绑定为空")
+        Long kbId,
+
         @Schema(description = "按时间正序排列的消息")
         List<Item> messages
 ) {
