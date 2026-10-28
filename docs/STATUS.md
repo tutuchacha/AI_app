@@ -8,6 +8,7 @@
 - 切库结论：**成功**，代码无 MySQL 语法残留；RAG/分析全链路已在 PG 跑通
   （注册→建库→上传→切片→1024 维回填→检索 0.69→FIELDS 分析 READY→删库级联清空）
 - 测试：113 通过（H2 + memory 余弦，不覆盖 pgvector 路径）
+- 修复：分析页「运行中」状态点被面板 `.running` 样式撑成色块（类名冲突，已改 `running-panel`）
 - 模型：百炼 `qwen-plus`；向量 `text-embedding-v3`（1024 维）；超时 60s
 - 远程：`git@github.com:tutuchacha/AI_app.git`
 

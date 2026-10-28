@@ -733,7 +733,7 @@ function escapeHtml(text: string) {
             </div>
           </div>
 
-          <div v-if="viewing.status === 'PENDING' || viewing.status === 'RUNNING'" class="running">
+          <div v-if="viewing.status === 'PENDING' || viewing.status === 'RUNNING'" class="running-panel">
             <div class="running-bar"><i /></div>
             <p>
               {{
@@ -744,7 +744,7 @@ function escapeHtml(text: string) {
             </p>
           </div>
 
-          <div v-else-if="viewing.status === 'FAILED'" class="failed">
+          <div v-else-if="viewing.status === 'FAILED'" class="failed-panel">
             <el-icon :size="20"><CircleClose /></el-icon>
             <div>
               <strong>这次分析没有完成</strong>
@@ -1130,7 +1130,7 @@ function escapeHtml(text: string) {
   gap: 6px;
 }
 
-.running {
+.running-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1155,12 +1155,12 @@ function escapeHtml(text: string) {
   animation: slide 1.15s ease-in-out infinite;
 }
 
-.running p {
+.running-panel p {
   color: var(--xy-muted);
   font-size: 11.5px;
 }
 
-.failed {
+.failed-panel {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -1172,12 +1172,12 @@ function escapeHtml(text: string) {
   color: var(--xy-coral);
 }
 
-.failed strong {
+.failed-panel strong {
   color: #b64135;
   font-size: 12.5px;
 }
 
-.failed p {
+.failed-panel p {
   margin-top: 4px;
   color: #8a6a66;
   font-size: 11px;
