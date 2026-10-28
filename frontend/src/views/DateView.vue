@@ -1,0 +1,800 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Aim, Calendar, Delete, Edit, Location, Plus, Star } from '@element-plus/icons-vue'
+import LearningNote from '@/components/LearningNote.vue'
+import {
+  createDateTarget,
+  deleteDateTarget,
+  getDateProfile,
+  listDateTargets,
+  saveDateProfile,
+  stageOptions,
+  updateDateTarget,
+} from '@/api/date'
+import type { DateProfile, DateTarget, DateTargetInput } from '@/api/date'
+
+const profile = ref<DateProfile | null>(null)
+const targets = ref<DateTarget[]>([])
+const selectedId = ref<number | null>(null)
+const loading = ref(false)
+const loadError = ref('')
+const saving = ref(false)
+
+const profileDialog = ref(false)
+const targetDialog = ref(false)
+const editingTargetId = ref<number | null>(null)
+
+const profileForm = reactive({
+  nickname: '',
+  gender: '',
+  age: null as number | null,
+  city: '',
+  occupation: '',
+  hobbies: '',
+  personality: '',
+  goal: '',
+  notes: '',
+})
+
+const targetForm = reactive<DateTargetInput>({
+  name: '',
+  channel: '',
+  stage: 'MET',
+  age: null,
+  city: '',
+  interests: '',
+  taboos: '',
+  notes: '',
+  lastContactAt: '',
+})
+
+const selected = computed(() => targets.value.find((item) => item.id === selectedId.value) ?? null)
+const profileReady = computed(() => !!profile.value?.nickname)
+const fmtAge = (age: number | null) => (age ? `${age} 岁` : '未填')
+
+const subtitle = computed(() => {
+  if (!profileReady.value) return '先写下自己的档案，AI 才能按你的性格和城市给建议'
+  return `${profile.value?.nickname} · ${profile.value?.city || '未填城市'} · 跟进 ${targets.value.length} 个对象`
+})
+
+function message(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback
+}
+
+async function load() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const [mine, list] = await Promise.all([getDateProfile(), listDateTargets()])
+    profile.value = mine
+    targets.value = list
+    if (!list.some((item) => item.id === selectedId.value)) {
+      selectedId.value = list[0]?.id ?? null
+    }
+  } catch (err) {
+    loadError.value = message(err, '加载恋爱助手数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function openProfileDialog() {
+  Object.assign(profileForm, {
+    nickname: profile.value?.nickname ?? '',
+    gender: profile.value?.gender ?? '',
+    age: profile.value?.age ?? null,
+    city: profile.value?.city ?? '',
+    occupation: profile.value?.occupation ?? '',
+    hobbies: profile.value?.hobbies ?? '',
+    personality: profile.value?.personality ?? '',
+    goal: profile.value?.goal ?? '',
+    notes: profile.value?.notes ?? '',
+  })
+  profileDialog.value = true
+}
+
+async function submitProfile() {
+  saving.value = true
+  try {
+    profile.value = await saveDateProfile({ ...profileForm })
+    ElMessage.success('档案已保存')
+    profileDialog.value = false
+  } catch (err) {
+    ElMessage.error(message(err, '保存失败'))
+  } finally {
+    saving.value = false
+  }
+}
+
+function openTargetDialog(target?: DateTarget) {
+  editingTargetId.value = target?.id ?? null
+  Object.assign(targetForm, {
+    name: target?.name ?? '',
+    channel: target?.channel ?? '',
+    stage: target?.stage ?? 'MET',
+    age: target?.age ?? null,
+    city: target?.city ?? profile.value?.city ?? '',
+    interests: target?.interests ?? '',
+    taboos: target?.taboos ?? '',
+    notes: target?.notes ?? '',
+    lastContactAt: target?.lastContactAt ?? '',
+  })
+  targetDialog.value = true
+}
+
+async function submitTarget() {
+  if (!targetForm.name.trim()) {
+    ElMessage.warning('先给对方起个称呼')
+    return
+  }
+  saving.value = true
+  try {
+    const saved = editingTargetId.value
+      ? await updateDateTarget(editingTargetId.value, { ...targetForm })
+      : await createDateTarget({ ...targetForm })
+    ElMessage.success(editingTargetId.value ? '档案已更新' : '已新建对象档案')
+    targetDialog.value = false
+    await load()
+    selectedId.value = saved.id
+  } catch (err) {
+    ElMessage.error(message(err, '保存失败'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function removeTarget(target: DateTarget) {
+  try {
+    await ElMessageBox.confirm(`删除「${target.name}」的档案？建议记录会一并消失。`, '确认删除', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    await deleteDateTarget(target.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (err) {
+    ElMessage.error(message(err, '删除失败'))
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="date-page">
+    <LearningNote
+      title="恋爱助手 = 建档 + 策略 + 反馈"
+      :points="['先写清自己的画像与城市', '每个对象单独建档，按阶段给建议', '执行后回填反应，AI 再调整']"
+      next="D-02：AI 下一步策略与约会地点推荐"
+    />
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">恋爱助手</h1>
+        <p class="page-subtitle">{{ subtitle }}</p>
+      </div>
+      <span class="pill mint"><el-icon><Aim /></el-icon> 目标：牵手成功</span>
+    </div>
+
+    <div v-if="loadError" class="error-bar card">
+      <span>{{ loadError }}</span>
+      <el-button size="small" round :loading="loading" @click="load">重试</el-button>
+    </div>
+
+    <div class="date-layout">
+      <aside class="side">
+        <div class="mine card">
+          <div class="card-top">
+            <strong>我的档案</strong>
+            <el-button text size="small" @click="openProfileDialog">
+              <el-icon><Edit /></el-icon>
+              {{ profileReady ? '编辑' : '去建档' }}
+            </el-button>
+          </div>
+          <template v-if="profileReady">
+            <div class="mine-name">
+              <span class="avatar">{{ profile?.nickname?.slice(0, 1) }}</span>
+              <div>
+                <b>{{ profile?.nickname }}</b>
+                <span>{{ [profile?.gender, fmtAge(profile?.age ?? null)].filter((v) => v && v !== '未填').join(' · ') || '未填基本信息' }}</span>
+              </div>
+            </div>
+            <p class="mine-line">
+              <el-icon><Location /></el-icon>
+              {{ profile?.city || '未填城市，地点推荐会受限' }}
+            </p>
+            <p v-if="profile?.hobbies" class="mine-line">
+              <el-icon><Star /></el-icon>
+              {{ profile.hobbies }}
+            </p>
+            <p v-if="profile?.goal" class="mine-goal">目标：{{ profile.goal }}</p>
+          </template>
+          <p v-else class="mine-empty">
+            还没有档案。写下性格、城市和目标，AI 才能给出贴合你的建议。
+          </p>
+        </div>
+
+        <div class="targets card">
+          <div class="card-top">
+            <strong>对象档案</strong>
+            <el-button text size="small" @click="openTargetDialog()">
+              <el-icon><Plus /></el-icon>
+              新增
+            </el-button>
+          </div>
+          <p v-if="!targets.length" class="targets-empty">
+            还没有对象。先把正在接触的人建个档，再从「AI 下一步」开始。
+          </p>
+          <ul v-else>
+            <li
+              v-for="item in targets"
+              :key="item.id"
+              :class="{ active: item.id === selectedId }"
+              @click="selectedId = item.id"
+            >
+              <span class="avatar small">{{ item.name.slice(0, 1) }}</span>
+              <div class="tg-main">
+                <b>{{ item.name }}</b>
+                <span>{{ item.channel || '未填途径' }} · {{ item.city || '未填城市' }}</span>
+              </div>
+              <span class="stage" :class="item.stage.toLowerCase()">{{ item.stageLabel }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="flow card">
+          <h3>使用流程</h3>
+          <ol>
+            <li><i>1</i> 建档：我的画像 + 对方信息</li>
+            <li><i>2</i> 出策略：本阶段下一步</li>
+            <li><i>3</i> 执行后回填对方反应</li>
+            <li><i>4</i> 复盘调整节奏与阶段</li>
+          </ol>
+        </div>
+      </aside>
+
+      <section class="detail">
+        <div v-if="!selected" class="empty card">
+          <el-icon :size="26"><Star /></el-icon>
+          <h3>选一个对象开始</h3>
+          <p>左侧新增对象档案后，这里会显示阶段、喜好和 AI 建议。</p>
+          <el-button type="primary" round @click="openTargetDialog()">新建对象档案</el-button>
+        </div>
+
+        <template v-else>
+          <div class="profile card">
+            <div class="profile-head">
+              <div class="avatar">{{ selected.name.slice(0, 1) }}</div>
+              <div class="profile-id">
+                <div class="profile-name">
+                  <h2>{{ selected.name }}</h2>
+                  <span class="stage" :class="selected.stage.toLowerCase()">{{ selected.stageLabel }}</span>
+                </div>
+                <p>
+                  {{ [selected.channel, fmtAge(selected.age), selected.city].filter((v) => v && v !== '未填').join(' · ') || '信息待补充' }}
+                </p>
+              </div>
+              <div class="profile-actions">
+                <el-button size="small" round @click="openTargetDialog(selected)">
+                  <el-icon><Edit /></el-icon> 编辑
+                </el-button>
+                <el-button size="small" round text type="danger" @click="removeTarget(selected)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="facts">
+              <div>
+                <span>最近联系</span>
+                <b>{{ selected.lastContactAt || '未记录' }}</b>
+              </div>
+              <div>
+                <span>兴趣/在意的点</span>
+                <b>{{ selected.interests || '未填' }}</b>
+              </div>
+              <div>
+                <span>雷点</span>
+                <b>{{ selected.taboos || '未填' }}</b>
+              </div>
+            </div>
+
+            <p v-if="selected.notes" class="notes">
+              <el-icon><Calendar /></el-icon>
+              {{ selected.notes }}
+            </p>
+          </div>
+
+          <div class="advice card">
+            <div class="card-top">
+              <strong>AI 下一步</strong>
+              <span class="tag-next">D-02 接入中</span>
+            </div>
+            <p class="advice-empty">
+              下一版会结合你的画像、对方阶段与城市，给出「本阶段目标 / 3 个可执行动作 / 参考话术 / 禁忌 / 成功判断」，
+              并附 1–2 个适合当前阶段的约会地点（高德 POI）。
+            </p>
+            <el-button type="primary" round disabled>生成建议（D-02）</el-button>
+          </div>
+        </template>
+      </section>
+    </div>
+
+    <el-dialog v-model="profileDialog" title="我的档案" width="560px" append-to-body>
+      <el-form label-width="92px" label-position="left">
+        <el-form-item label="昵称">
+          <el-input v-model="profileForm.nickname" maxlength="40" placeholder="AI 对你的称呼" />
+        </el-form-item>
+        <el-form-item label="性别">
+          <el-input v-model="profileForm.gender" maxlength="16" placeholder="自填，可留空" />
+        </el-form-item>
+        <el-form-item label="年龄">
+          <el-input-number v-model="profileForm.age" :min="18" :max="99" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="城市">
+          <el-input v-model="profileForm.city" maxlength="40" placeholder="杭州" />
+        </el-form-item>
+        <el-form-item label="职业">
+          <el-input v-model="profileForm.occupation" maxlength="60" />
+        </el-form-item>
+        <el-form-item label="兴趣日常">
+          <el-input
+            v-model="profileForm.hobbies"
+            type="textarea"
+            :rows="2"
+            maxlength="500"
+            placeholder="跑步、咖啡、看展……"
+          />
+        </el-form-item>
+        <el-form-item label="性格沟通">
+          <el-input
+            v-model="profileForm.personality"
+            type="textarea"
+            :rows="2"
+            maxlength="500"
+            placeholder="慢热，文字比当面自然"
+          />
+        </el-form-item>
+        <el-form-item label="关系目标">
+          <el-input
+            v-model="profileForm.goal"
+            type="textarea"
+            :rows="2"
+            maxlength="500"
+            placeholder="找长期关系，希望三个月内稳定"
+          />
+        </el-form-item>
+        <el-form-item label="补充">
+          <el-input v-model="profileForm.notes" type="textarea" :rows="2" maxlength="1000" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="profileDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitProfile">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="targetDialog"
+      :title="editingTargetId ? '编辑对象档案' : '新建对象档案'"
+      width="560px"
+      append-to-body
+    >
+      <el-form label-width="92px" label-position="left">
+        <el-form-item label="称呼" required>
+          <el-input v-model="targetForm.name" maxlength="40" placeholder="昵称即可，别填真实全名" />
+        </el-form-item>
+        <el-form-item label="阶段">
+          <el-select v-model="targetForm.stage" style="width: 100%">
+            <el-option v-for="opt in stageOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="认识途径">
+          <el-input v-model="targetForm.channel" maxlength="60" placeholder="同事 / 朋友介绍 / 社交软件" />
+        </el-form-item>
+        <el-form-item label="年龄">
+          <el-input-number v-model="targetForm.age" :min="18" :max="99" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="城市">
+          <el-input v-model="targetForm.city" maxlength="40" />
+        </el-form-item>
+        <el-form-item label="最近联系">
+          <el-date-picker
+            v-model="targetForm.lastContactAt"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选日期"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="兴趣在意点">
+          <el-input
+            v-model="targetForm.interests"
+            type="textarea"
+            :rows="2"
+            maxlength="500"
+            placeholder="露营、猫、日料"
+          />
+        </el-form-item>
+        <el-form-item label="雷点">
+          <el-input
+            v-model="targetForm.taboos"
+            type="textarea"
+            :rows="2"
+            maxlength="500"
+            placeholder="不喜欢被追问前任"
+          />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input
+            v-model="targetForm.notes"
+            type="textarea"
+            :rows="3"
+            maxlength="1000"
+            placeholder="最近聊了什么、回消息频率、约过的地点"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="targetDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitTarget">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.date-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: calc(100vh - 60px - 54px);
+  min-height: 560px;
+}
+
+.date-layout {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+  min-height: 0;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+  flex: 0 0 300px;
+  overflow-y: auto;
+}
+
+.mine,
+.targets,
+.flow {
+  padding: 13px 14px;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+  font-size: 12px;
+}
+
+.card-top strong {
+  font-weight: 700;
+}
+
+.mine-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.mine-name b {
+  display: block;
+  font-size: 13px;
+}
+
+.mine-name span {
+  color: var(--xy-muted);
+  font-size: 10.5px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 11px;
+  background: var(--xy-violet-soft);
+  color: var(--xy-violet);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.avatar.small {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 9px;
+  font-size: 11.5px;
+}
+
+.mine-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  color: #5f6377;
+  font-size: 11px;
+}
+
+.mine-goal {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--xy-mint-soft);
+  color: #4d5a62;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.mine-empty,
+.targets-empty {
+  color: var(--xy-muted);
+  font-size: 10.5px;
+  line-height: 1.7;
+}
+
+.targets ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 268px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.targets li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--xy-line);
+  border-radius: 9px;
+  background: #fbfbfe;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.targets li:hover,
+.targets li.active {
+  border-color: #cfc4ff;
+  background: #f7f4ff;
+}
+
+.tg-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.tg-main b {
+  display: block;
+  font-size: 12px;
+}
+
+.tg-main span {
+  color: var(--xy-muted);
+  font-size: 9.5px;
+}
+
+.stage {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #f0f1f6;
+  color: #6a6e80;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.stage.chatting {
+  background: var(--xy-violet-soft);
+  color: var(--xy-violet);
+}
+
+.stage.invited {
+  background: #fff2e4;
+  color: #c4762b;
+}
+
+.stage.dating {
+  background: #ffeaf0;
+  color: #c14b6b;
+}
+
+.stage.together {
+  background: var(--xy-mint-soft);
+  color: var(--xy-mint);
+}
+
+.stage.paused {
+  background: #f0f1f6;
+  color: var(--xy-muted);
+}
+
+.flow h3 {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.flow ol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #5f6377;
+  font-size: 10.5px;
+}
+
+.flow li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.flow i {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: var(--xy-violet-soft);
+  color: var(--xy-violet);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+  color: var(--xy-muted);
+  text-align: center;
+}
+
+.empty h3 {
+  color: var(--xy-ink);
+  font-size: 15px;
+}
+
+.empty p {
+  max-width: 300px;
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+
+.profile {
+  padding: 16px;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.profile-id {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-name h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.profile-id p {
+  margin-top: 3px;
+  color: var(--xy-muted);
+  font-size: 11px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.facts div {
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #fafafd;
+}
+
+.facts span {
+  display: block;
+  color: var(--xy-muted);
+  font-size: 9.5px;
+}
+
+.facts b {
+  display: block;
+  margin-top: 3px;
+  color: #4d5060;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.notes {
+  display: flex;
+  gap: 5px;
+  margin-top: 10px;
+  color: #5f6377;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.advice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px;
+}
+
+.tag-next {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #fff2e4;
+  color: #c4762b;
+  font-size: 9px;
+}
+
+.advice-empty {
+  color: var(--xy-muted);
+  font-size: 11.5px;
+  line-height: 1.75;
+}
+</style>

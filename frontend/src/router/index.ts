@@ -23,10 +23,10 @@ const router = createRouter({
           meta: { title: '对话', subtitle: '多轮会话、流式输出与传输层抽象' },
         },
         {
-          path: 'companion',
-          name: 'companion',
-          component: () => import('@/views/CompanionView.vue'),
-          meta: { title: '恋爱陪伴', subtitle: '角色卡、人设与长期记忆（规划中）' },
+          path: 'date',
+          name: 'date',
+          component: () => import('@/views/DateView.vue'),
+          meta: { title: '恋爱助手', subtitle: '建档、阶段策略与反馈迭代' },
         },
         {
           path: 'support',

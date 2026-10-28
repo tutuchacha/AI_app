@@ -24,7 +24,7 @@ const { learningMode } = storeToRefs(ui)
 
 const navItems = [
   { path: '/chat', label: '对话', icon: ChatDotRound },
-  { path: '/companion', label: '恋爱陪伴', icon: Star },
+  { path: '/date', label: '恋爱助手', icon: Star },
   { path: '/support', label: '智能客服', icon: Service },
   { path: '/knowledge', label: '知识库', icon: Collection },
   { path: '/analysis', label: '文档分析', icon: Document },
