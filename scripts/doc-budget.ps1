@@ -7,10 +7,10 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $limits = @(
-  [pscustomobject]@{ File = 'AGENTS.md'; Lines = 75; Chars = 3400 }
+  [pscustomobject]@{ File = 'AGENTS.md'; Lines = 40; Chars = 1400 }
   [pscustomobject]@{ File = 'README.md'; Lines = 80; Chars = 3400 }
-  [pscustomobject]@{ File = 'docs/STATUS.md'; Lines = 35; Chars = 1800 }
-  [pscustomobject]@{ File = 'docs/INDEX.md'; Lines = 45; Chars = 2200 }
+  [pscustomobject]@{ File = 'docs/STATUS.md'; Lines = 30; Chars = 1500 }
+  [pscustomobject]@{ File = 'docs/INDEX.md'; Lines = 32; Chars = 1400 }
   [pscustomobject]@{ File = 'docs/00-架构方案.md'; Lines = 450; Chars = 17000 }
   [pscustomobject]@{ File = 'docs/01-环境准备.md'; Lines = 220; Chars = 6500 }
   [pscustomobject]@{ File = 'docs/04-对标-yu-ai-agent.md'; Lines = 200; Chars = 5500 }
@@ -55,15 +55,31 @@ $rows = foreach ($item in $limits) {
 
 $rows | Format-Table -AutoSize
 $total = ($rows | Measure-Object -Property Tokens -Sum).Sum
+
+function Get-PackageTokens([string]$relative) {
+  $path = Join-Path $root $relative
+  if (-not (Test-Path $path)) { return 0 }
+  return Get-TokenEstimate (Get-Content -Raw -Encoding UTF8 $path)
+}
+
+$package = (Get-PackageTokens 'AGENTS.md') +
+           (Get-PackageTokens 'docs/STATUS.md') +
+           (Get-PackageTokens 'docs/INDEX.md') + 250
 Write-Host ''
-Write-Host ("全部文档约 {0} tokens；最小开工包 ≈ AGENTS + STATUS + 模块 §0 ≈ 1.3k tokens" -f $total)
+Write-Host ("全部文档约 {0} tokens；开工包（AGENTS+STATUS+INDEX+模块 §0）≈ {1} tokens" -f $total, $package)
+$packageOver = $package -gt 1600
+if ($packageOver) {
+  Write-Host ("[doc-budget] 开工包超预算：{0} > 1600 tokens，先删重复内容" -f $package) -ForegroundColor Red
+}
 
 $bad = @($rows | Where-Object { $_.Status -eq 'OVER' })
-if ($bad.Count -gt 0) {
-  Write-Host ''
-  Write-Host '超限文件：' -ForegroundColor Red
-  foreach ($row in $bad) {
-    Write-Host ("  {0}（{1}/{2} 行，{3}/{4} 字符）" -f $row.File, $row.Lines, $row.LineLimit, $row.Chars, $row.CharLimit)
+if ($bad.Count -gt 0 -or $packageOver) {
+  if ($bad.Count -gt 0) {
+    Write-Host ''
+    Write-Host '超限文件：' -ForegroundColor Red
+    foreach ($row in $bad) {
+      Write-Host ("  {0}（{1}/{2} 行，{3}/{4} 字符）" -f $row.File, $row.Lines, $row.LineLimit, $row.Chars, $row.CharLimit)
+    }
   }
   exit 1
 }

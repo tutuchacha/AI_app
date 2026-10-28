@@ -46,7 +46,7 @@ flowchart TD
 
 ## 4. 每一步收尾流程
 
-1. 重写 `docs/STATUS.md`（≤35 行）：阶段、下一步、阻塞、提交号。
+1. 重写 `docs/STATUS.md`（≤30 行）：阶段、当前能力、下一步、限制。
 2. 追加 `docs/progress/YYYY-MM.md`：结果、验证、下一步、commit，单条 ≤8 行。
 3. 更新受影响的文档（见 §3 清单），新文档登记到 `INDEX.md`。
 4. 跑 `pwsh scripts/doc-check.ps1`：预算 + 死链 + INDEX 覆盖，必须 0 失败。
