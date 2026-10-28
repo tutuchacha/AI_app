@@ -58,7 +58,10 @@ const {
   greeting: props.greeting,
 })
 
-const emit = defineEmits<{ changed: [uid: string]; handoff: [payload: { question: string; bestScore: number }] }>()
+const emit = defineEmits<{
+  changed: [uid: string]
+  handoff: [payload: { question: string; bestScore: number; conversationUid: string }]
+}>()
 
 const model = ref('qwen-plus')
 const listRef = ref<HTMLElement>()
@@ -251,7 +254,7 @@ const chunkParts = computed(() => {
 
 function requestHandoff() {
   const question = [...messages.value].reverse().find((item) => item.role === 'user')?.content ?? ''
-  emit('handoff', { question, bestScore: lastScore.value })
+  emit('handoff', { question, bestScore: lastScore.value, conversationUid: conversationId.value })
 }
 
 /** 后端历史 → 组件消息；status 用大写存储，这里转成前端的小写 */

@@ -1,16 +1,16 @@
 # 智能客服（support）
 
-> M4-01~03：真实知识库绑定 + 引用溯源 + 低置信转人工提示。
-> 客服**没有独立后端包**，复用聊天与 RAG；只有策略与切片原文两个小接口。
+> M4-01~04：真实知识库绑定 + 引用溯源 + 低置信转人工 + 工单落库。
+> 客服**没有独立后端包**，复用聊天与 RAG；自身只有策略、切片原文、工单三类小接口。
 
 ## 0. 速览（做 M4 / 改客服只读这节）
 
 - 入口：`/support`（`SupportView.vue`）→ `ChatPanel mode="support"`
 - 选库：左侧卡片读 `GET /api/knowledge-bases`，选中值经 `v-model:kb-id` 传给 `ChatPanel`，随消息带 `kbId`
-- 引用：回答下方引用卡片 → `GET /api/chunks/{id}` 取原文，按 `snippet` 前 30 字高亮
+- 引用：回答下方引用卡片 → `GET /api/chunks/{id}` 取原文，按 `snippet` 前 16 字高亮
 - 兜底：最高引用分 < `app.support.min-score`（默认 **0.6**）→ 前端出「没有可靠依据 + 转人工」
+- 工单：点「转人工」→ `POST /api/support/tickets` 落 `support_ticket`，左侧列表显示待处理/已关闭
 - 提示词：`support` 模块走 `SUPPORT_EMPTY_PROMPT` / `SUPPORT_RAG_PROMPT`，比通用 RAG 更严
-- 转人工工单：**M4-04 未实现**，按钮只发 `handoff` 事件
 
 ## 1. 口径与阈值
 
@@ -29,6 +29,9 @@
 | --- | --- | --- |
 | `GET` | `/api/support/policy` | 返回 `minScore` / `topK` / `handoffEnabled`，需登录 |
 | `GET` | `/api/chunks/{chunkId}` | 切片原文 + 文件名 + 序号 + token 数；非本人库返回 403 |
+| `POST` | `/api/support/tickets` | 建工单：`question` 必填，带 `conversationUid` / `kbId` / `bestScore` |
+| `GET` | `/api/support/tickets` | 我的工单，id 倒序最多 20 条 |
+| `POST` | `/api/support/tickets/{id}/close` | OPEN → CLOSED，幂等；别人的工单 403 |
 
 对话本身仍走 `POST /api/chat/stream`，`module` 传 `support`、`kbId` 传选中库。
 
@@ -44,21 +47,34 @@
 
 ## 4. 前端结构
 
-- `SupportView.vue`：真实库列表 + 文档/切片统计 + FAQ + 流程说明；阈值来自 policy 接口
+- `SupportView.vue`：真实库列表 + 文档/切片统计 + 转人工工单列表 + FAQ + 流程说明；阈值来自 policy 接口
 - `ChatPanel.vue`：新增 `kb-picker`（客服页也显示选库）、`low-score`（兜底阈值）、`handoff` 事件；凭 `defineModel('kbId')` 与父页双向绑定
 - `MessageItem.vue`：引用卡片改为可点按钮，`@cite` 抛 `Citation`
 - 引用弹窗：`el-dialog` + `chunkParts` 三段渲染（命中段 `<mark>`），读不到时显示错误文案
+- 工单卡：`onHandoff` 调 `createSupportTicket` 后 `loadTickets()` 刷新；OPEN 才显示「关闭」
 
-## 5. 验证记录（2026-10-28）
+## 5. 工单模型（`support_ticket`，V8）
+
+| 字段 | 说明 |
+| --- | --- |
+| `user_id` | 归属人，只查自己的（FK → `sys_user`，级联删） |
+| `conversation_uid` / `kb_id` | 兜底现场留痕，不建外键，删会话/库不影响工单 |
+| `question` | 用户原问题（≤500 字），`best_score` 触发时的最高引用分 |
+| `status` | 只有 `OPEN` / `CLOSED` 两态；关闭幂等 |
+| `note` | 处理备注，当前前端未开放填写 |
+
+## 6. 验证记录（2026-10-28）
 
 - `SupportFlowTest` 4/4：policy 默认值、切片越权 403/不存在 404、有资料走严格提示、无资料劝转人工
+- `SupportTicketTest` 4/4：建单+列表、关闭幂等与越权 403、空问题 400、关闭不存在 404
+- 全量后端 122/122；`npm run typecheck` 通过
 - 真库：`demo` 库 `test001`（406 切片）问「退款多久到账」→ 命中 0.505 < 0.6 → 出兜底卡；
-  问「什么是JVM进程缓存」→ 0.752 → 正常回答带引用，点引用可看原文
-- `npm run typecheck` 通过
+  点转人工建单 #2（待处理）→ 列表刷新 → 点关闭变已关闭，计数回到 0
+- 问「什么是JVM进程缓存」→ 0.752 → 正常回答带引用，点引用可看原文
 
-## 6. 已知限制 / 下一步
+## 7. 已知限制 / 下一步
 
 - 兜底只在**前端**判断（引用分随 SSE `citation` 事件到达）；后端仅做提示词约束，不会中止生成
 - 阈值是按当前 `text-embedding-v3` + 中文语料实测的，换向量模型必须重标
 - 不漏检的前提是库里有对应切片；空库时一律走兜底
-- M4-04：`support_ticket` 表（V8）+ 提交/列表接口 + 工单状态机
+- 工单只做提交/关闭，没有坐席分配、通知与 SLA；`note` 字段已建表但前端未填

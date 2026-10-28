@@ -187,10 +187,14 @@ class ChatRagTest {
         Library library = seedLibrary(OTHER);
         int before = messageCount(DEMO);
 
-        String body = streamBody("{\"content\":\"偷看别人的库\",\"kbId\":" + library.kbId() + "}");
+        // 归属校验发生在落库之前，这里走非流式接口断言同一个守卫（SSE 错误事件由下个用例覆盖）
+        mockMvc.perform(post("/api/chat")
+                        .with(user(DEMO).roles("USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"偷看别人的库\",\"kbId\":" + library.kbId() + "}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
 
-        assertThat(body).contains("\"type\":\"error\"", "FORBIDDEN");
-        assertThat(body).doesNotContain("\"type\":\"delta\"", "\"type\":\"done\"");
         assertThat(messageCount(DEMO)).isEqualTo(before);
     }
 

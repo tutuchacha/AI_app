@@ -6,20 +6,24 @@ import LearningNote from '@/components/LearningNote.vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 import { listDocuments, listKnowledgeBases } from '@/api/knowledge'
 import type { KnowledgeBase, KnowledgeDocument } from '@/api/knowledge'
-import { getSupportPolicy } from '@/api/support'
+import { closeSupportTicket, createSupportTicket, getSupportPolicy, listSupportTickets } from '@/api/support'
+import type { SupportTicket } from '@/api/support'
 
 const panelRef = ref<InstanceType<typeof ChatPanel>>()
 
 const bases = ref<KnowledgeBase[]>([])
 const documents = ref<KnowledgeDocument[]>([])
+const tickets = ref<SupportTicket[]>([])
 const kbId = ref(0)
 const loading = ref(false)
 const loadError = ref('')
+const submitting = ref(false)
 /** 后端下发，别在前端写死阈值 */
 const minScore = ref(0.45)
 
 const activeKb = computed(() => bases.value.find((item) => item.id === kbId.value) ?? null)
 const readyCount = computed(() => documents.value.filter((item) => item.status === 'READY').length)
+const openTickets = computed(() => tickets.value.filter((item) => item.status === 'OPEN').length)
 const chunkCount = computed(() =>
   documents.value.reduce((sum, item) => sum + (item.chunkCount || 0), 0),
 )
@@ -78,16 +82,53 @@ async function loadBases() {
   }
 }
 
-/** 兜底卡片的「转人工」：M4-04 才建工单，这里先把问题带到控制台便于联调 */
-function onHandoff(payload: { question: string; bestScore: number }) {
-  console.info('[support] handoff', payload)
-  ElMessage.info(`已准备转人工：最高引用分 ${Math.round(payload.bestScore * 100)}%，工单入口在 M4-04`)
+/** 兜底卡片的「转人工」：落一条工单，左侧列表立刻刷新 */
+async function onHandoff(payload: {
+  question: string
+  bestScore: number
+  conversationUid: string
+}) {
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    const ticket = await createSupportTicket({
+      question: payload.question,
+      bestScore: payload.bestScore,
+      conversationUid: payload.conversationUid,
+      kbId: kbId.value || undefined,
+    })
+    ElMessage.success(`已建工单 #${ticket.id}，客服会尽快处理`)
+    await loadTickets()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '工单提交失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function loadTickets() {
+  try {
+    tickets.value = await listSupportTickets()
+  } catch {
+    tickets.value = []
+  }
+}
+
+async function closeTicket(id: number) {
+  try {
+    await closeSupportTicket(id)
+    ElMessage.success(`工单 #${id} 已关闭`)
+    await loadTickets()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '关闭失败')
+  }
 }
 
 watch(kbId, (id) => void loadDocuments(id))
 onMounted(async () => {
   await loadBases()
   await loadDocuments(kbId.value)
+  await loadTickets()
 })
 </script>
 
@@ -95,8 +136,8 @@ onMounted(async () => {
   <div class="support-page">
     <LearningNote
       title="客服 = RAG + 引用 + 兜底"
-      :points="['先检索绑定的知识库，再生成回答', '引用可点开看原文', '低于置信阈值就提示转人工']"
-      next="M4-04：转人工工单（表 + 提交 + 处理状态）"
+      :points="['先检索绑定的知识库，再生成回答', '引用可点开看原文', '低于置信阈值自动建转人工工单']"
+      next="M4-04：转人工工单已接通（提交 / 列表 / 关闭）"
     />
 
     <div class="page-head">
@@ -104,7 +145,7 @@ onMounted(async () => {
         <h1 class="page-title">智能客服</h1>
         <p class="page-subtitle">{{ subtitle }}</p>
       </div>
-      <span class="pill mint"><el-icon><Service /></el-icon> 真实知识库</span>
+      <span class="pill mint"><el-icon><Service /></el-icon> M4 客服链路</span>
     </div>
 
     <div v-if="loadError" class="error-bar card">
@@ -144,6 +185,35 @@ onMounted(async () => {
           </router-link>
         </div>
 
+        <div class="tickets card">
+          <h3>
+            转人工工单
+            <span v-if="tickets.length" class="tk-count">{{ openTickets }} 待处理 / {{ tickets.length }}</span>
+          </h3>
+          <p v-if="!tickets.length" class="tk-empty">
+            还没有工单。回答低于兜底线时点「转人工」，这里会自动建单。
+          </p>
+          <ul v-else>
+            <li v-for="item in tickets" :key="item.id" :class="item.status.toLowerCase()">
+              <div class="tk-top">
+                <span class="tk-id">#{{ item.id }}</span>
+                <span class="tk-status">{{ item.status === 'OPEN' ? '待处理' : '已关闭' }}</span>
+                <span class="tk-score">{{ Math.round(item.bestScore * 100) }}%</span>
+              </div>
+              <p class="tk-q">{{ item.question }}</p>
+              <el-button
+                v-if="item.status === 'OPEN'"
+                text
+                size="small"
+                :loading="submitting"
+                @click="closeTicket(item.id)"
+              >
+                关闭
+              </el-button>
+            </li>
+          </ul>
+        </div>
+
         <div class="faq card">
           <h3>常见问题</h3>
           <button v-for="item in faqs" :key="item" @click="ask(item)">
@@ -158,7 +228,7 @@ onMounted(async () => {
             <li><i>1</i> 检索绑定库 TopK</li>
             <li><i>2</i> 组装资料与约束</li>
             <li><i>3</i> 流式生成 + 引用</li>
-            <li><i>4</i> 低置信提示转人工</li>
+            <li><i>4</i> 低置信自动建工单</li>
           </ol>
         </div>
       </aside>
@@ -271,6 +341,90 @@ onMounted(async () => {
   color: var(--xy-violet);
   font-size: 11px;
   text-decoration: none;
+}
+
+.tickets {
+  padding: 13px 14px;
+}
+
+.tickets h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tk-count {
+  color: var(--xy-muted);
+  font-size: 9.5px;
+  font-weight: 500;
+}
+
+.tk-empty {
+  color: var(--xy-muted);
+  font-size: 10.5px;
+  line-height: 1.7;
+}
+
+.tickets ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 236px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.tickets li {
+  padding: 8px 9px;
+  border: 1px solid var(--xy-line);
+  border-radius: 9px;
+  background: #fbfbfe;
+}
+
+.tickets li.closed {
+  opacity: 0.62;
+}
+
+.tk-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+}
+
+.tk-id {
+  color: var(--xy-violet);
+  font-weight: 700;
+}
+
+.tk-status {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--xy-mint-soft);
+  color: var(--xy-mint);
+  font-size: 9px;
+}
+
+.tickets li.closed .tk-status {
+  background: #f0f1f6;
+  color: var(--xy-muted);
+}
+
+.tk-score {
+  margin-left: auto;
+  color: var(--xy-muted);
+}
+
+.tk-q {
+  margin-top: 4px;
+  color: #5f6377;
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .faq,
