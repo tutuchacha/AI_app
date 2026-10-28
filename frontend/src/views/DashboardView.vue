@@ -1,49 +1,115 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Coin, DataLine, Timer, Warning } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { Coin, DataLine, Refresh, Timer, Warning } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
+import { getUsage, type UsageView } from '@/api/metrics'
 
-const stats = [
-  { label: '今日调用', value: '128', unit: '次', delta: '+18%', icon: DataLine, tone: 'violet' },
-  { label: 'Token 消耗', value: '86.4', unit: 'k', delta: '+12%', icon: Coin, tone: 'coral' },
-  { label: 'P95 延迟', value: '1.8', unit: 's', delta: '-6%', icon: Timer, tone: 'mint' },
-  { label: '错误率', value: '0.7', unit: '%', delta: '正常', icon: Warning, tone: 'amber' },
-]
+const GRAFANA_URL = 'http://192.168.101.137:3000'
 
-const days = [
-  { day: '周一', value: 42 },
-  { day: '周二', value: 68 },
-  { day: '周三', value: 51 },
-  { day: '周四', value: 90 },
-  { day: '周五', value: 76 },
-  { day: '周六', value: 112 },
-  { day: '周日', value: 128 },
-]
+const usage = ref<UsageView | null>(null)
+const loading = ref(false)
+const error = ref('')
 
-const max = computed(() => Math.max(...days.map((item) => item.value)))
+async function load() {
+  loading.value = true
+  error.value = ''
+  try {
+    usage.value = await getUsage(7)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '用量数据加载失败'
+  } finally {
+    loading.value = false
+  }
+}
 
-const modules = [
-  { name: '通用对话', value: 54, color: '#7c5cff' },
-  { name: '智能客服', value: 28, color: '#14b88a' },
-  { name: '恋爱陪伴', value: 12, color: '#ff6b5e' },
-  { name: '文档分析', value: 6, color: '#f0a020' },
-]
+onMounted(load)
+
+function formatTokens(value: number): string {
+  if (value >= 10000) return `${(value / 1000).toFixed(1)}k`
+  return String(value)
+}
+
+const stats = computed(() => {
+  const today = usage.value?.today
+  const mine = usage.value?.mine
+  return [
+    {
+      label: '今日调用',
+      value: String(today?.calls ?? 0),
+      unit: '次',
+      note: `我的 ${mine?.calls ?? 0} 次`,
+      icon: DataLine,
+      tone: 'violet',
+    },
+    {
+      label: 'Token 消耗',
+      value: formatTokens((today?.tokensIn ?? 0) + (today?.tokensOut ?? 0)),
+      unit: 'tok',
+      note: `入 ${formatTokens(today?.tokensIn ?? 0)} / 出 ${formatTokens(today?.tokensOut ?? 0)}`,
+      icon: Coin,
+      tone: 'coral',
+    },
+    {
+      label: 'P95 延迟',
+      value: ((today?.p95Ms ?? 0) / 1000).toFixed(1),
+      unit: 's',
+      note: '今日样本',
+      icon: Timer,
+      tone: 'mint',
+    },
+    {
+      label: '错误率',
+      value: (today?.errorRate ?? 0).toFixed(1),
+      unit: '%',
+      note: (today?.errorRate ?? 0) > 2 ? '偏高' : '正常',
+      icon: Warning,
+      tone: 'amber',
+    },
+  ]
+})
+
+const chartDays = computed(() => usage.value?.daily ?? [])
+
+const max = computed(() => Math.max(1, ...chartDays.value.map((item) => item.calls)))
+
+const palette = ['#7c5cff', '#14b88a', '#ff6b5e', '#f0a020', '#6d8cff']
+
+const modules = computed(() =>
+  (usage.value?.modules ?? []).map((item, index) => ({
+    name: item.label,
+    value: item.share,
+    calls: item.calls,
+    color: palette[index % palette.length],
+  })),
+)
+
+const sourceText = computed(() => {
+  if (!usage.value) return '等待数据'
+  return usage.value.prometheusUp ? '库 + Prometheus' : '数据库口径'
+})
 </script>
 
 <template>
   <div class="page">
     <LearningNote
-      title="可观测性从第一天就埋点"
-      :points="['Micrometer 统一采集', 'Actuator 暴露 /prometheus', 'Grafana 做展示与告警']"
-      next="M5：自定义 ai_chat_latency / ai_tokens_total 指标"
+      title="指标从埋点到看板"
+      :points="['Micrometer 埋点，Actuator 暴露', '看板经后端取数，不外露内网地址', 'Prometheus 挂了自动退回数据库口径']"
+      next="M4：告警阈值与更多模块维度"
     />
 
     <div class="page-head">
       <div>
         <h1 class="page-title">用量看板</h1>
-        <p class="page-subtitle">调用量、Token、延迟与错误率。当前为示例数据，M5 接入 Prometheus。</p>
+        <p class="page-subtitle">
+          调用量、Token、P95 延迟与错误率。数据来自本地库与 Prometheus，30 秒缓存。
+        </p>
       </div>
-      <span class="pill">示例数据</span>
+      <span class="pill" :class="{ mint: usage?.prometheusUp }">{{ sourceText }}</span>
+    </div>
+
+    <div v-if="error" class="error-bar card">
+      <span>{{ error }}</span>
+      <el-button size="small" round :loading="loading" @click="load">重试</el-button>
     </div>
 
     <div class="grid-4">
@@ -55,9 +121,9 @@ const modules = [
           </div>
         </div>
         <div class="stat-value">
-          <b>{{ stat.value }}</b>
+          <b>{{ loading && !usage ? '—' : stat.value }}</b>
           <span>{{ stat.unit }}</span>
-          <em>{{ stat.delta }}</em>
+          <em>{{ stat.note }}</em>
         </div>
       </div>
     </div>
@@ -67,19 +133,23 @@ const modules = [
         <div class="card-head">
           <div>
             <h3>近 7 天调用量</h3>
-            <p>单位：次 / 天</p>
+            <p>单位：次 / 天，只统计已完成的模型回复</p>
           </div>
-          <span class="pill mint">+18%</span>
+          <el-button text size="small" :loading="loading" @click="load">
+            <el-icon><Refresh /></el-icon>
+            刷新
+          </el-button>
         </div>
 
         <div class="chart">
-          <div v-for="item in days" :key="item.day" class="bar-col">
-            <span class="bar-value">{{ item.value }}</span>
+          <div v-for="item in chartDays" :key="item.date" class="bar-col">
+            <span class="bar-value">{{ item.calls }}</span>
             <div class="bar-track">
-              <i :style="{ height: `${(item.value / max) * 100}%` }" />
+              <i :style="{ height: `${(item.calls / max) * 100}%` }" />
             </div>
-            <span class="bar-day">{{ item.day }}</span>
+            <span class="bar-day">{{ item.label }}</span>
           </div>
+          <div v-if="!chartDays.length" class="chart-empty">暂无调用记录</div>
         </div>
       </div>
 
@@ -87,30 +157,34 @@ const modules = [
         <div class="card-head">
           <div>
             <h3>模块分布</h3>
-            <p>按调用次数占比</p>
+            <p>按近 7 天调用次数占比</p>
           </div>
         </div>
         <div class="module-list">
           <div v-for="item in modules" :key="item.name" class="module">
             <div class="module-row">
               <span>{{ item.name }}</span>
-              <b>{{ item.value }}%</b>
+              <b>{{ item.value }}% · {{ item.calls }} 次</b>
             </div>
             <div class="module-track">
               <i :style="{ width: `${item.value}%`, background: item.color }" />
             </div>
           </div>
+          <div v-if="!modules.length" class="inline-empty">还没有调用记录</div>
         </div>
       </div>
     </div>
 
     <div class="obs card">
       <div class="obs-copy">
-        <span class="pill">M5 接入</span>
+        <span class="pill" :class="{ mint: usage?.prometheusUp }">
+          {{ usage?.prometheusUp ? 'Prometheus 已连接' : 'Prometheus 未连接' }}
+        </span>
         <h3>Actuator → Prometheus → Grafana</h3>
         <p>
-          后端暴露 <code>/actuator/prometheus</code>，Prometheus 每 10s 抓取，Grafana
-          展示 QPS、P95、Token、RAG 命中率。这里的卡片只是前端占位。
+          后端埋点 <code>ai_chat_requests</code> / <code>ai_chat_tokens</code> /
+          <code>ai_chat_latency</code>，Prometheus 每 15s 抓取。当前活跃流
+          <b>{{ usage?.activeStreams ?? 0 }}</b> 条；Prometheus 不可用时本页仍按数据库统计。
         </p>
       </div>
       <div class="obs-flow">
@@ -119,6 +193,7 @@ const modules = [
         <span>Prometheus</span>
         <i>→</i>
         <span>Grafana</span>
+        <el-button size="small" round tag="a" :href="GRAFANA_URL" target="_blank">打开 Grafana</el-button>
       </div>
     </div>
   </div>
@@ -186,8 +261,8 @@ const modules = [
   margin-left: auto;
   padding: 2px 6px;
   border-radius: 999px;
-  background: var(--xy-mint-soft);
-  color: var(--xy-mint);
+  background: #f4f5fa;
+  color: #7d8196;
   font-size: 9.5px;
   font-style: normal;
   font-weight: 700;
@@ -223,12 +298,26 @@ const modules = [
 }
 
 .chart {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 12px;
   height: 210px;
   margin-top: 20px;
   padding: 0 4px;
+}
+
+.chart-empty,
+.inline-empty {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  color: var(--xy-muted);
+  font-size: 11.5px;
+}
+
+.inline-empty {
+  min-height: 80px;
 }
 
 .bar-col {
@@ -258,6 +347,7 @@ const modules = [
 .bar-track i {
   display: block;
   width: 55%;
+  min-height: 2px;
   border-radius: 7px 7px 3px 3px;
   background: linear-gradient(180deg, #ff8a5c, #ff5e8a);
   transition: height 0.3s ease;
@@ -360,6 +450,18 @@ const modules = [
 .obs-flow i {
   color: #c3c6d4;
   font-style: normal;
+}
+
+.error-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-color: #ffe0dc;
+  background: #fff8f7;
+  color: var(--xy-coral);
+  font-size: 11.5px;
 }
 
 @media (max-width: 1000px) {

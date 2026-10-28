@@ -9,6 +9,7 @@
 - 埋点：`ChatOrchestrator` → `ChatMetrics`（done / stopped / failed）
 - 部署：**CentOS VM `192.168.101.137`**（Docker）→ Prometheus `:9090`、Grafana `:3000`
 - 看板：`ops/grafana/dashboards/ai-chat.json` 自动挂载到「星屿 AI」目录（uid `ai-chat`）
+- 前端看板：`GET /api/metrics/usage`（M3-05，后端取数 + 30s 缓存，Prometheus 挂了退回数据库）
 - 验证：`pwsh ops/smoke-metrics.ps1`（只查指标名，不需要 Docker）
 
 ## 1. 指标
@@ -17,7 +18,7 @@
 | --- | --- | --- | --- |
 | `ai_chat_requests_total` | counter | `module` `model` `status` | 每轮对话计数；status = `done` / `stopped` / `failed` |
 | `ai_chat_tokens_total` | counter | `type` = `input` / `output` | token 消耗 |
-| `ai_chat_latency_seconds` | timer | `module` `model` | 一轮耗时（含模型生成），出 `quantile=0.5/0.95` 与 `_count` |
+| `ai_chat_latency_seconds` | timer | `module` `model` | 一轮耗时（含模型生成），出 `_bucket` 直方图（P95 用它算）与 `quantile=0.5/0.95`（2 分钟窗口，闲时归零） |
 | `ai_chat_stream_active` | gauge | — | 正在进行的 SSE 流数量 |
 
 JVM、HTTP、连接池等指标由 Actuator 自带（`jvm_memory_used_bytes` 等）。

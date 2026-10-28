@@ -31,3 +31,6 @@ app:
     max-chars: 2000
     max-chunks: 10
     max-tokens: 512
+  metrics:
+    # 测试不连 Prometheus，走数据库口径
+    enabled: false

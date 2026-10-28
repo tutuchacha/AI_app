@@ -65,6 +65,8 @@ public class ChatMetrics {
                 .description("One chat turn, including model generation")
                 .tags("module", mod, "model", mdl)
                 .publishPercentiles(0.5, 0.95)
+                // 分位数是 2 分钟滑动窗口，闲时会归零；桶是累计值，Grafana 才算得准
+                .publishPercentileHistogram()
                 .register(registry)
                 .record(Duration.ofMillis(Math.max(latencyMs, 0)));
     }

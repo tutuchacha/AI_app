@@ -98,6 +98,12 @@ app:
   chat:
     # 每人每分钟最多几轮；0 关闭限流（多实例部署换 Redis，M6）
     rate-limit-per-minute: ${CHAT_RATE_LIMIT:20}
+  metrics:
+    # 用量看板取活跃流等运行时指标；Prometheus 在内网 VM 上
+    prometheus-url: ${PROMETHEUS_URL:http://192.168.101.137:9090}
+    enabled: ${METRICS_PROMETHEUS:true}
+    # 看板缓存；Prometheus 挂了自动退回数据库口径
+    cache-seconds: 30
   rag:
     # 文档落盘目录，相对启动目录；生产由 compose 挂卷
     upload-dir: ${UPLOAD_DIR:./uploads}
