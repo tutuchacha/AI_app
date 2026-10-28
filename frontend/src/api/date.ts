@@ -79,3 +79,54 @@ export function updateDateTarget(id: number, input: DateTargetInput) {
 export function deleteDateTarget(id: number) {
   return request<void>(`/date/targets/${id}`, { method: 'DELETE' })
 }
+
+export interface AdviceAction {
+  title: string
+  detail: string
+  timing: string
+}
+
+export interface AdviceScript {
+  scene: string
+  text: string
+}
+
+export interface DateSpot {
+  name: string
+  address: string
+  category: string
+  location: string
+  rating: string
+}
+
+export interface DateAdvice {
+  id: number
+  targetId: number
+  stage: DateStage
+  stageLabel: string
+  city: string
+  goal: string
+  actions: AdviceAction[]
+  scripts: AdviceScript[]
+  avoid: string[]
+  success: string
+  spots: DateSpot[]
+  model: string
+  promptTokens: number
+  completionTokens: number
+  latencyMs: number
+  createdAt: string
+}
+
+/** 生成建议：模型 + 高德地点，一次调用可能 5~15s */
+export function createDateAdvice(targetId: number) {
+  return request<DateAdvice>('/date/advice', {
+    method: 'POST',
+    body: JSON.stringify({ targetId }),
+  })
+}
+
+/** 同一对象最近 5 条建议，倒序 */
+export function listDateAdvice(targetId: number) {
+  return request<DateAdvice[]>(`/date/advice?targetId=${targetId}`)
+}

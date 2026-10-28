@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Calendar, Delete, Edit, Location, Plus, Star } from '@element-plus/icons-vue'
+import { Aim, Calendar, CopyDocument, Delete, Edit, Location, Plus, Position, Refresh, Star } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
 import {
+  createDateAdvice,
   createDateTarget,
   deleteDateTarget,
   getDateProfile,
+  listDateAdvice,
   listDateTargets,
   saveDateProfile,
   stageOptions,
   updateDateTarget,
 } from '@/api/date'
-import type { DateProfile, DateTarget, DateTargetInput } from '@/api/date'
+import type { DateAdvice, DateProfile, DateTarget, DateTargetInput } from '@/api/date'
 
 const profile = ref<DateProfile | null>(null)
 const targets = ref<DateTarget[]>([])
@@ -24,6 +26,9 @@ const saving = ref(false)
 const profileDialog = ref(false)
 const targetDialog = ref(false)
 const editingTargetId = ref<number | null>(null)
+const advices = ref<DateAdvice[]>([])
+const activeAdviceId = ref<number | null>(null)
+const adviceLoading = ref(false)
 
 const profileForm = reactive({
   nickname: '',
@@ -52,6 +57,10 @@ const targetForm = reactive<DateTargetInput>({
 const selected = computed(() => targets.value.find((item) => item.id === selectedId.value) ?? null)
 const profileReady = computed(() => !!profile.value?.nickname)
 const fmtAge = (age: number | null) => (age ? `${age} 岁` : '未填')
+const activeAdvice = computed(
+  () => advices.value.find((item) => item.id === activeAdviceId.value) ?? advices.value[0] ?? null,
+)
+const adviceTime = (iso: string) => (iso ? iso.slice(5, 16).replace('T', ' ') : '')
 
 const subtitle = computed(() => {
   if (!profileReady.value) return '先写下自己的档案，AI 才能按你的性格和城市给建议'
@@ -163,6 +172,49 @@ async function removeTarget(target: DateTarget) {
   }
 }
 
+async function loadAdvice(targetId: number | null) {
+  advices.value = []
+  activeAdviceId.value = null
+  if (!targetId) return
+  try {
+    advices.value = await listDateAdvice(targetId)
+    activeAdviceId.value = advices.value[0]?.id ?? null
+  } catch {
+    advices.value = []
+  }
+}
+
+async function generateAdvice() {
+  if (!selected.value || adviceLoading.value) return
+  adviceLoading.value = true
+  try {
+    const advice = await createDateAdvice(selected.value.id)
+    advices.value = [advice, ...advices.value.filter((item) => item.id !== advice.id)].slice(0, 5)
+    activeAdviceId.value = advice.id
+    ElMessage.success('建议已生成')
+  } catch (err) {
+    ElMessage.error(message(err, '生成失败，请重试'))
+  } finally {
+    adviceLoading.value = false
+  }
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('话术已复制')
+  } catch {
+    ElMessage.warning('复制失败，请手动选择')
+  }
+}
+
+function amapLink(location: string, name: string) {
+  return location
+    ? `https://uri.amap.com/marker?position=${location}&name=${encodeURIComponent(name)}`
+    : ''
+}
+
+watch(selectedId, (id) => void loadAdvice(id))
 onMounted(load)
 </script>
 
@@ -171,7 +223,7 @@ onMounted(load)
     <LearningNote
       title="恋爱助手 = 建档 + 策略 + 反馈"
       :points="['先写清自己的画像与城市', '每个对象单独建档，按阶段给建议', '执行后回填反应，AI 再调整']"
-      next="D-02：AI 下一步策略与约会地点推荐"
+      next="D-02 已接通：AI 建议 + 高德地点；D-03 回填对方反应"
     />
 
     <div class="page-head">
@@ -314,13 +366,116 @@ onMounted(load)
           <div class="advice card">
             <div class="card-top">
               <strong>AI 下一步</strong>
-              <span class="tag-next">D-02 接入中</span>
+              <div class="advice-actions">
+                <span v-if="activeAdvice" class="tag-next">
+                  {{ activeAdvice.stageLabel }} · {{ adviceTime(activeAdvice.createdAt) }}
+                </span>
+                <el-button
+                  size="small"
+                  round
+                  type="primary"
+                  :loading="adviceLoading"
+                  @click="generateAdvice"
+                >
+                  <el-icon><Refresh /></el-icon>
+                  {{ activeAdvice ? '重新生成' : '生成建议' }}
+                </el-button>
+              </div>
             </div>
-            <p class="advice-empty">
-              下一版会结合你的画像、对方阶段与城市，给出「本阶段目标 / 3 个可执行动作 / 参考话术 / 禁忌 / 成功判断」，
-              并附 1–2 个适合当前阶段的约会地点（高德 POI）。
-            </p>
-            <el-button type="primary" round disabled>生成建议（D-02）</el-button>
+
+            <template v-if="activeAdvice">
+              <p class="advice-goal">{{ activeAdvice.goal }}</p>
+
+              <div v-if="activeAdvice.actions.length" class="advice-block">
+                <h4>接下来 3 个动作</h4>
+                <ol class="acts">
+                  <li v-for="(act, i) in activeAdvice.actions" :key="act.title + i">
+                    <i>{{ i + 1 }}</i>
+                    <div>
+                      <div class="act-top">
+                        <b>{{ act.title }}</b>
+                        <span v-if="act.timing">{{ act.timing }}</span>
+                      </div>
+                      <p>{{ act.detail }}</p>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+
+              <div v-if="activeAdvice.scripts.length" class="advice-block">
+                <h4>参考话术</h4>
+                <div v-for="s in activeAdvice.scripts" :key="s.text" class="script">
+                  <span class="scene">{{ s.scene }}</span>
+                  <p>{{ s.text }}</p>
+                  <el-button text size="small" @click="copyText(s.text)">
+                    <el-icon><CopyDocument /></el-icon>
+                  </el-button>
+                </div>
+              </div>
+
+              <div v-if="activeAdvice.avoid.length" class="advice-block">
+                <h4>别做这些</h4>
+                <div class="chips">
+                  <span v-for="item in activeAdvice.avoid" :key="item" class="chip avoid">{{ item }}</span>
+                </div>
+              </div>
+
+              <div v-if="activeAdvice.success" class="advice-block">
+                <h4>成功判断</h4>
+                <p class="advice-success">{{ activeAdvice.success }}</p>
+              </div>
+
+              <div v-if="activeAdvice.spots.length" class="advice-block">
+                <h4>约会地点 · {{ activeAdvice.city || '未填城市' }}</h4>
+                <div class="spots">
+                  <a
+                    v-for="spot in activeAdvice.spots"
+                    :key="spot.name"
+                    class="spot"
+                    :href="amapLink(spot.location, spot.name)"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <div class="spot-top">
+                      <b>{{ spot.name }}</b>
+                      <span v-if="spot.rating" class="rating">{{ spot.rating }}</span>
+                    </div>
+                    <p>{{ spot.address || '地址未提供' }}</p>
+                    <span class="spot-cat">
+                      {{ spot.category || '地点' }} · 高德打开
+                      <el-icon><Position /></el-icon>
+                    </span>
+                  </a>
+                </div>
+              </div>
+
+              <div class="advice-meta">
+                {{ activeAdvice.model }} · {{ activeAdvice.completionTokens }} tok ·
+                {{ (activeAdvice.latencyMs / 1000).toFixed(1) }}s
+              </div>
+
+              <div v-if="advices.length > 1" class="history">
+                <span>历史</span>
+                <button
+                  v-for="item in advices"
+                  :key="item.id"
+                  :class="{ on: item.id === activeAdvice.id }"
+                  @click="activeAdviceId = item.id"
+                >
+                  {{ adviceTime(item.createdAt) }}
+                </button>
+              </div>
+            </template>
+
+            <template v-else>
+              <p class="advice-empty">
+                结合你的画像、对方阶段与城市，给出「阶段目标 / 3 个动作 / 参考话术 / 禁忌 / 成功判断」，
+                并按城市附 1–2 个高德推荐的约会地点。
+              </p>
+              <el-button type="primary" round :loading="adviceLoading" @click="generateAdvice">
+                生成建议
+              </el-button>
+            </template>
           </div>
         </template>
       </section>
@@ -779,9 +934,15 @@ onMounted(load)
 .advice {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 10px;
   padding: 16px;
+}
+
+.advice-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .tag-next {
@@ -790,6 +951,216 @@ onMounted(load)
   background: #fff2e4;
   color: #c4762b;
   font-size: 9px;
+}
+
+.advice-goal {
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: linear-gradient(115deg, #f6f2ff, #fff7f2);
+  color: #3f4254;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.7;
+}
+
+.advice-block h4 {
+  margin-bottom: 7px;
+  color: var(--xy-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.acts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acts li {
+  display: flex;
+  gap: 9px;
+}
+
+.acts i {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 6px;
+  background: var(--xy-violet-soft);
+  color: var(--xy-violet);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.act-top {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.act-top b {
+  font-size: 12px;
+}
+
+.act-top span {
+  color: #b8842f;
+  font-size: 9.5px;
+}
+
+.acts p {
+  margin-top: 2px;
+  color: #6a6e80;
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+.script {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 8px 9px;
+  border: 1px solid var(--xy-line);
+  border-radius: 9px;
+  background: #fbfbfe;
+}
+
+.script + .script {
+  margin-top: 6px;
+}
+
+.scene {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--xy-mint-soft);
+  color: var(--xy-mint);
+  font-size: 9px;
+}
+
+.script p {
+  flex: 1;
+  color: #4d5060;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 2px 8px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+
+.chip.avoid {
+  background: #fff1f1;
+  color: #b45151;
+}
+
+.advice-success {
+  color: #4d5060;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.spots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.spot {
+  display: block;
+  padding: 9px 10px;
+  border: 1px solid var(--xy-line);
+  border-radius: 10px;
+  background: #fbfbfe;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.spot:hover {
+  border-color: #cfc4ff;
+  transform: translateY(-1px);
+}
+
+.spot-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.spot-top b {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rating {
+  color: #c4762b;
+  font-size: 9.5px;
+}
+
+.spot p {
+  margin-top: 3px;
+  color: var(--xy-muted);
+  font-size: 9.5px;
+  line-height: 1.55;
+}
+
+.spot-cat {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 5px;
+  color: var(--xy-violet);
+  font-size: 9px;
+}
+
+.advice-meta {
+  color: #a7aab8;
+  font-size: 9px;
+}
+
+.history {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--xy-line);
+  color: var(--xy-muted);
+  font-size: 9.5px;
+}
+
+.history button {
+  padding: 2px 7px;
+  border: 1px solid var(--xy-line);
+  border-radius: 6px;
+  background: #fff;
+  color: #6a6e80;
+  font-size: 9.5px;
+  cursor: pointer;
+}
+
+.history button.on {
+  border-color: #cfc4ff;
+  background: #f7f4ff;
+  color: var(--xy-violet);
 }
 
 .advice-empty {

@@ -1,6 +1,8 @@
 package com.tutuchacha.ai.date;
 
 import com.tutuchacha.ai.common.Result;
+import com.tutuchacha.ai.date.dto.DateAdviceRequest;
+import com.tutuchacha.ai.date.dto.DateAdviceView;
 import com.tutuchacha.ai.date.dto.DateProfileRequest;
 import com.tutuchacha.ai.date.dto.DateProfileView;
 import com.tutuchacha.ai.date.dto.DateTargetRequest;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -28,9 +31,11 @@ import java.util.List;
 public class DateController {
 
     private final DateService dateService;
+    private final DateAdviceService adviceService;
 
-    public DateController(DateService dateService) {
+    public DateController(DateService dateService, DateAdviceService adviceService) {
         this.dateService = dateService;
+        this.adviceService = adviceService;
     }
 
     @Operation(summary = "我的画像", description = "未建档返回 data=null",
@@ -75,5 +80,21 @@ public class DateController {
     public Result<Void> deleteTarget(@PathVariable Long id, Authentication authentication) {
         dateService.deleteTarget(authentication.getName(), id);
         return Result.ok();
+    }
+
+    @Operation(summary = "生成下一步建议", description = "按画像 + 对方档案 + 阶段调模型，并补高德地点",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/advice")
+    public Result<DateAdviceView> createAdvice(@Valid @RequestBody DateAdviceRequest request,
+                                               Authentication authentication) {
+        return Result.ok(adviceService.create(authentication.getName(), request.targetId()));
+    }
+
+    @Operation(summary = "建议历史", description = "同一对象最近 5 条，倒序",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/advice")
+    public Result<List<DateAdviceView>> adviceHistory(@RequestParam Long targetId,
+                                                      Authentication authentication) {
+        return Result.ok(adviceService.history(authentication.getName(), targetId));
     }
 }

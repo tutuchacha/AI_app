@@ -109,6 +109,12 @@ app:
     min-score: ${SUPPORT_MIN_SCORE:0.6}
     top-k: ${SUPPORT_TOP_K:5}
     handoff-enabled: ${SUPPORT_HANDOFF:true}
+  date:
+    # 恋爱助手：高德 Web 服务 key 只在后端用，前端只调自家接口
+    amap-key: ${AMAP_KEY:}
+    amap-base-url: ${AMAP_BASE_URL:https://restapi.amap.com}
+    # 每次建议最多带几个地点
+    spot-limit: ${DATE_SPOT_LIMIT:2}
   rag:
     # 文档落盘目录，相对启动目录；生产由 compose 挂卷
     upload-dir: ${UPLOAD_DIR:./uploads}
