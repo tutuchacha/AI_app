@@ -95,6 +95,21 @@ export function reindexDocument(id: number) {
   return request<KnowledgeDocument>(`/documents/${id}/reindex`, { method: 'POST' })
 }
 
+export interface ChunkDetail {
+  id: number
+  documentId: number
+  kbId: number
+  filename: string
+  chunkIndex: number
+  tokenCount: number
+  content: string
+}
+
+/** 引用溯源：按切片 ID 取完整原文，只能看自己的库 */
+export function getChunk(id: number) {
+  return request<ChunkDetail>(`/chunks/${id}`)
+}
+
 export function searchKnowledgeBase(kbId: number, query: string, topK?: number) {
   return request<SearchHit[]>(`/knowledge-bases/${kbId}/search`, {
     method: 'POST',

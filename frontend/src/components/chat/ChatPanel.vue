@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
-import type { ChatMessage, ChatMode } from '@/types/chat'
+import type { ChatMessage, ChatMode, Citation } from '@/types/chat'
 import type { Persona } from '@/data/personas'
 import { listKnowledgeBases } from '@/api/knowledge'
-import type { KnowledgeBase } from '@/api/knowledge'
+import type { ChunkDetail, KnowledgeBase } from '@/api/knowledge'
+import { getChunk } from '@/api/knowledge'
 import { useChat } from '@/chat/useChat'
 import MessageItem from './MessageItem.vue'
 import ChatComposer from './ChatComposer.vue'
@@ -17,6 +18,10 @@ const props = withDefaults(
     subtitle?: string
     greeting?: string
     suggestions?: string[]
+    /** 是否显示选库器；默认只有通用对话显示，客服页显式打开 */
+    kbPicker?: boolean | null
+    /** 客服兜底阈值：最高引用分低于它就算「没查到」 */
+    lowScore?: number
   }>(),
   {
     mode: 'chat',
@@ -25,6 +30,8 @@ const props = withDefaults(
     subtitle: '',
     greeting: '',
     suggestions: () => [],
+    kbPicker: null,
+    lowScore: 0,
   },
 )
 
@@ -51,14 +58,15 @@ const {
   greeting: props.greeting,
 })
 
-const emit = defineEmits<{ changed: [uid: string] }>()
+const emit = defineEmits<{ changed: [uid: string]; handoff: [payload: { question: string; bestScore: number }] }>()
 
 const model = ref('qwen-plus')
 const listRef = ref<HTMLElement>()
 const composerRef = ref<InstanceType<typeof ChatComposer>>()
 const bases = ref<KnowledgeBase[]>([])
-const kbId = ref(0)
-const kbPickerVisible = computed(() => props.mode === 'chat')
+/** 客服页用 v-model:kb-id 控制选中的库；通用对话自己管理 */
+const kbId = defineModel<number>('kbId', { default: 0 })
+const kbPickerVisible = computed(() => props.kbPicker ?? props.mode === 'chat')
 const activeKb = computed(() => bases.value.find((item) => item.id === kbId.value) ?? null)
 
 const displayTitle = computed(() => props.title || props.persona?.name || '新对话')
@@ -180,6 +188,70 @@ function handleRetry() {
   if (streaming.value) return
   stickToBottom.value = true
   void retry(model.value, kbId.value || undefined).then(() => emit('changed', conversationId.value))
+}
+
+/** 客服兜底：答完发现最高引用分不够，就把「转人工」摆出来，而不是让用户继续猜 */
+const lowConfidence = computed(() => {
+  if (props.mode !== 'support' || props.lowScore <= 0) return false
+  const last = messages.value[messages.value.length - 1]
+  if (!last || last.role !== 'assistant' || last.status !== 'done') return false
+  return bestScore(last) < props.lowScore
+})
+
+const lastScore = computed(() => {
+  const last = messages.value[messages.value.length - 1]
+  return last ? bestScore(last) : 0
+})
+
+function bestScore(message: ChatMessage) {
+  return message.citations.reduce((max, item) => Math.max(max, item.score ?? 0), 0)
+}
+
+/** 引用溯源弹窗：按切片 ID 拉原文，并把引用摘要那段高亮出来 */
+const chunkVisible = ref(false)
+const chunkLoading = ref(false)
+const chunkError = ref('')
+const chunk = ref<ChunkDetail | null>(null)
+const chunkHit = ref('')
+
+async function openCitation(citation: Citation) {
+  chunkVisible.value = true
+  chunkLoading.value = true
+  chunkError.value = ''
+  chunk.value = null
+  chunkHit.value = citation.snippet.replace(/…$/, '').trim()
+  try {
+    chunk.value = await getChunk(Number(citation.id))
+  } catch (err) {
+    chunkError.value = err instanceof Error ? err.message : '原文加载失败'
+  } finally {
+    chunkLoading.value = false
+  }
+}
+
+/**
+ * 命中段切成「前 / 中 / 后」三段渲染。
+ * 引用摘要里空白被压成单个空格，原文有换行，所以用正则把空白放宽再定位。
+ */
+const chunkParts = computed(() => {
+  const content = chunk.value?.content ?? ''
+  const probe = chunkHit.value.slice(0, 16)
+  if (!probe) return { before: content, hit: '', after: '' }
+  const pattern = probe
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\s+/g, '\\s+')
+  const match = content.match(new RegExp(pattern))
+  if (!match || match.index === undefined) return { before: content, hit: '', after: '' }
+  return {
+    before: content.slice(0, match.index),
+    hit: match[0],
+    after: content.slice(match.index + match[0].length),
+  }
+})
+
+function requestHandoff() {
+  const question = [...messages.value].reverse().find((item) => item.role === 'user')?.content ?? ''
+  emit('handoff', { question, bestScore: lastScore.value })
 }
 
 /** 后端历史 → 组件消息；status 用大写存储，这里转成前端的小写 */
@@ -345,12 +417,24 @@ defineExpose({ reset, restart, send, loadConversation })
             :key="message.id"
             :message="message"
             :data-mid="message.id"
+            @cite="openCitation"
           />
 
           <div v-if="suggestions.length && !hasUserMessage" class="chips inline">
             <button v-for="item in suggestions" :key="item" :disabled="streaming" @click="pick(item)">
               {{ item }}
             </button>
+          </div>
+
+          <div v-if="lowConfidence" class="handoff">
+            <div class="handoff-copy">
+              <strong>这条回答没有可靠依据</strong>
+              <p>
+                最高引用分 {{ Math.round(lastScore * 100) }}%，低于兜底线
+                {{ Math.round(lowScore * 100) }}%。已按「不确定」处理，建议转人工确认。
+              </p>
+            </div>
+            <el-button size="small" round type="primary" @click="requestHandoff">转人工</el-button>
           </div>
         </template>
       </div>
@@ -415,6 +499,23 @@ defineExpose({ reset, restart, send, loadConversation })
       <span v-if="lastFinishReason === 'length'" class="warn">已达长度上限，可发「继续」</span>
       <span>{{ transportName === 'mock' ? '离线 Mock' : modelName }}</span>
     </div>
+
+    <el-dialog v-model="chunkVisible" title="引用原文" width="620px" append-to-body>
+      <div v-if="chunkLoading" class="chunk-tip">正在读取切片…</div>
+      <div v-else-if="chunkError" class="chunk-tip error">{{ chunkError }}</div>
+      <template v-else-if="chunk">
+        <div class="chunk-meta">
+          <span class="doc">DOC</span>
+          <strong>{{ chunk.filename }}</strong>
+          <span>第 {{ chunk.chunkIndex + 1 }} 片</span>
+          <span>{{ chunk.tokenCount }} tokens</span>
+        </div>
+        <div class="chunk-body">
+          {{ chunkParts.before
+          }}<mark v-if="chunkParts.hit">{{ chunkParts.hit }}</mark>{{ chunkParts.after }}
+        </div>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -821,5 +922,85 @@ defineExpose({ reset, restart, send, loadConversation })
   .messages {
     padding: 15px 13px 8px;
   }
+}
+
+/* 客服兜底卡片：回答不可信时贴在最后一条下面 */
+.handoff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-left: 43px;
+  padding: 11px 13px;
+  border: 1px dashed #ffd3c8;
+  border-radius: 12px;
+  background: #fff8f6;
+}
+
+.handoff-copy strong {
+  color: var(--xy-coral);
+  font-size: 12px;
+}
+
+.handoff-copy p {
+  margin-top: 3px;
+  color: #8a8798;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.chunk-tip {
+  padding: 18px 0;
+  color: var(--xy-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.chunk-tip.error {
+  color: var(--xy-coral);
+}
+
+.chunk-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--xy-muted);
+  font-size: 11px;
+}
+
+.chunk-meta strong {
+  color: #5f6377;
+  font-size: 12px;
+}
+
+.chunk-meta .doc {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--xy-violet-soft);
+  color: var(--xy-violet);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.chunk-body {
+  max-height: 52vh;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border: 1px solid var(--xy-line);
+  border-radius: 10px;
+  background: #fbfbfe;
+  color: #4a4e63;
+  font-size: 12px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chunk-body mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: #fff0b8;
+  color: inherit;
 }
 </style>

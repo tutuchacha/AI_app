@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { ChatMessage } from '@/types/chat'
 
 const props = defineProps<{ message: ChatMessage }>()
+const emit = defineEmits<{ cite: [citation: ChatMessage['citations'][number]] }>()
 
 const isAssistant = computed(() => props.message.role === 'assistant')
 const time = computed(() => {
@@ -37,15 +38,21 @@ const isTyping = computed(
       </div>
 
       <div v-if="message.citations.length" class="citations">
-        <div class="cit-title">引用来源</div>
-        <div v-for="citation in message.citations" :key="citation.id" class="citation">
+        <div class="cit-title">引用来源 · 点击看原文</div>
+        <button
+          v-for="citation in message.citations"
+          :key="citation.id"
+          type="button"
+          class="citation"
+          @click="emit('cite', citation)"
+        >
           <div class="cit-head">
             <span class="doc">DOC</span>
             <strong>{{ citation.title }}</strong>
             <span class="score">{{ Math.round(citation.score * 100) }}%</span>
           </div>
           <p>{{ citation.snippet }}</p>
-        </div>
+        </button>
       </div>
     </div>
   </div>
@@ -208,10 +215,22 @@ const isTyping = computed(
 }
 
 .citation {
+  display: block;
+  width: 100%;
   padding: 9px 11px;
   border: 1px solid #e6e2ff;
   border-radius: 10px;
   background: #faf9ff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.citation:hover {
+  border-color: #c9bfff;
+  box-shadow: 0 4px 12px rgba(124, 92, 255, 0.1);
 }
 
 .cit-head {

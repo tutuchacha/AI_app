@@ -23,14 +23,14 @@
 | `modules/rag.md` | 知识库、文档切片、检索接口与分步 | 做 M2 时 | 120 |
 | `modules/analysis.md` | 文档分析：表、接口、状态机、提示词 | 做 M3 时 | 120 |
 | `modules/observability.md` | 指标定义、Prometheus/Grafana 启动、看板 | 做 M1-06 / 看监控 | 120 |
+| `modules/support.md` | 智能客服：选库、引用溯源、低置信兜底 | 做 M4 / 改客服 | 120 |
 | `progress/YYYY-MM.md` | 流水账，只追加 | 只读当月最后 3 条 | 单条 8 |
 
 ## 计划新增（用到再建，不预建空文件）
 
 | 文档 | 触发时机 |
 | --- | --- |
-| `modules/companion.md` | M4 开始 |
-| `modules/support.md` | M4 开始 |
+| `modules/companion.md` | M4 恋爱陪伴开始 |
 | `03-本地启动.md` | M0 骨架跑通后 |
 
 ## 维护规则

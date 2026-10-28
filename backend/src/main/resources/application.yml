@@ -104,6 +104,11 @@ app:
     enabled: ${METRICS_PROMETHEUS:true}
     # 看板缓存；Prometheus 挂了自动退回数据库口径
     cache-seconds: 30
+  support:
+    # 客服兜底：最高引用分低于此值就当没查到，前端提示转人工
+    min-score: ${SUPPORT_MIN_SCORE:0.6}
+    top-k: ${SUPPORT_TOP_K:5}
+    handoff-enabled: ${SUPPORT_HANDOFF:true}
   rag:
     # 文档落盘目录，相对启动目录；生产由 compose 挂卷
     upload-dir: ${UPLOAD_DIR:./uploads}

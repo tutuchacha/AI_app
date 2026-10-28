@@ -3,26 +3,31 @@
 > 仪表盘：只写当前，≤35 行 / 1.8k 字符。历史去 progress，决策去 ADR。
 
 - 更新时间：2026-10-28
-- 阶段：**M3 完成**；M4 待定
+- 阶段：**M3 完成**；M4-01~03 客服主链路完成
 - 数据库：VM `192.168.101.137:5432/ai_app`（PG 16 + pgvector），Flyway `V1`~`V7` 全部 success
 - 切库结论：**成功**，代码无 MySQL 语法残留；RAG/分析全链路已在 PG 跑通
 - M3-05 用量看板：`GET /api/metrics/usage?days=7`（全局 `today` + 本人 `mine`、7 天曲线、模块占比、30s 缓存）
   - 口径：调用/token/P95/错误率/模块占比走 PG `message`+`conversation`；活跃流走 Prometheus，超时即退回
   - 前端只打后端取数，不外露内网地址；Grafana 只做外链，不嵌 iframe
 - 修复：P95 改用 `_bucket` 直方图（`quantile=` 是 2 分钟窗口，闲时归零），Grafana 同步 `histogram_quantile`
-- 测试：113 通过 + 新增 `UsageControllerTest`（全量待服务停后复跑）
+- M4-01~03 客服：`/support` 接真实知识库（选库 → 带 `kbId`）、引用可点开看原文、低置信出「转人工」兜底卡
+  - 新接口：`GET /api/support/policy`（阈值下发）、`GET /api/chunks/{id}`（切片原文，越权 403）
+  - 阈值 `app.support.min-score` 默认 **0.6**（实测相关命中 0.74+，无关 0.46~0.51），前端不写死
+  - `support` 模块独立提示词（有资料只答资料内 / 无资料直接建议转人工），见 `docs/modules/support.md`
+- 测试：`SupportFlowTest` 4/4 + `UsageControllerTest`；113 全量待服务停后复跑
 - 模型：百炼 `qwen-plus`；向量 `text-embedding-v3`（1024 维）；超时 60s
 
 ## 下一步（按顺序）
 
-1. 浏览器过一遍前端四流程（切库后回归）
-2. 聊天选库增强（解绑、多库同检）待确认
-3. M4 内容待确认（`companion` / `support` 文档尚未建）
+1. 服务停后复跑全量 `mvnw test`（预期 118）
+2. M4-04 转人工工单：`V8__support_ticket.sql` + 提交/列表 + 状态机
+3. 或转 `companion` 恋爱陪伴（角色卡 + 长期记忆）
 
 ## 已知限制
 
+- 兜底只在前端按 `citation.score` 判断，后端仅提示词约束，不会中止生成
+- 阈值按当前向量模型实测，换 embedding 必须重标
 - HNSW：带 `kb_id` 过滤时 10 万行实测退化为 seq scan，量大再优化
-- `embedding_vec` 固定 1024 维，换向量模型需迁移
 - 回滚库为本机 MySQL 8.0.29 `C:\dev\mysql`（服务已停）
 
 ## 恢复命令

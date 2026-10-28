@@ -56,6 +56,26 @@ public class ChatOrchestrator {
             %s
             """;
 
+    /** 客服模式 + 没检索到资料：不猜，直接引导转人工。 */
+    static final String SUPPORT_EMPTY_PROMPT = """
+            你是「星屿 AI」的在线客服，礼貌、简短。
+            本轮没有检索到任何售后资料，禁止编造政策、金额、时效或流程。
+            请用一两句话说明暂时没有查到相关规定，并建议用户转人工客服继续处理。
+            默认使用简体中文，不要提及「资料」「检索」这类内部词。
+            """;
+
+    /** 客服模式 + 有资料：只答资料内的，超出范围就转人工。 */
+    static final String SUPPORT_RAG_PROMPT = """
+            你是「星屿 AI」的在线客服，礼貌、简短。
+            只能依据下面给出的「参考资料」回答，不要用资料之外的信息补充事实，
+            也不要承诺资料里没有写明的时效与金额。
+            资料没有覆盖的内容，直接说明「资料里没有这项说明」，并建议用户转人工客服。
+            回答控制在 4 行以内，必要时分点，默认使用简体中文。
+
+            参考资料：
+            %s
+            """;
+
     private static final int MAX_PROMPT_SNIPPET = 500;
     private static final int MAX_CITATION_SNIPPET = 120;
 
@@ -95,7 +115,7 @@ public class ChatOrchestrator {
         long startedAt = System.currentTimeMillis();
         try {
             response = aiGateway.complete(new AiChatRequest(
-                    model, messagesOf(context, content, retry, rag), null, null));
+                    model, messagesOf(context, content, retry, rag, request.module()), null, null));
         } catch (RuntimeException ex) {
             conversationService.finish(context, new ConversationService.Finish(
                     "", 0, 0, 0, "FAILED", citations));
@@ -145,7 +165,7 @@ public class ChatOrchestrator {
 
         String conversationId = context.uid();
         AiChatRequest aiRequest = new AiChatRequest(
-                model, messagesOf(context, content, retry, rag), null, null);
+                model, messagesOf(context, content, retry, rag, request.module()), null, null);
         AtomicInteger promptTokens = new AtomicInteger();
         AtomicInteger completionTokens = new AtomicInteger();
         AtomicReference<String> finishReason = new AtomicReference<>("stop");
@@ -205,10 +225,9 @@ public class ChatOrchestrator {
 
     /** system + 历史 + 本轮 user；重试时若历史末尾已是同一条提问，就不再重复追加。 */
     private List<AiMessage> messagesOf(ConversationService.Context context, String content,
-                                       boolean retry, RagContext rag) {
+                                       boolean retry, RagContext rag, String module) {
         List<AiMessage> messages = new ArrayList<>();
-        messages.add(AiMessage.system(rag.prompt().isEmpty() ? SYSTEM_PROMPT
-                : RAG_SYSTEM_PROMPT.formatted(rag.prompt())));
+        messages.add(AiMessage.system(systemPrompt(module, rag)));
         messages.addAll(context.history());
         boolean alreadyAsked = retry && !context.history().isEmpty()
                 && "user".equals(lastRole(context.history()))
@@ -217,6 +236,16 @@ public class ChatOrchestrator {
             messages.add(AiMessage.user(content));
         }
         return messages;
+    }
+
+    /** 客服模式的提示词更严：没资料就转人工，有资料也不许外推。 */
+    private String systemPrompt(String module, RagContext rag) {
+        if ("support".equals(module)) {
+            return rag.prompt().isEmpty()
+                    ? SUPPORT_EMPTY_PROMPT
+                    : SUPPORT_RAG_PROMPT.formatted(rag.prompt());
+        }
+        return rag.prompt().isEmpty() ? SYSTEM_PROMPT : RAG_SYSTEM_PROMPT.formatted(rag.prompt());
     }
 
     /**
