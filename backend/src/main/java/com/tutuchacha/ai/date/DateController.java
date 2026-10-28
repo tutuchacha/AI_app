@@ -3,6 +3,8 @@ package com.tutuchacha.ai.date;
 import com.tutuchacha.ai.common.Result;
 import com.tutuchacha.ai.date.dto.DateAdviceRequest;
 import com.tutuchacha.ai.date.dto.DateAdviceView;
+import com.tutuchacha.ai.date.dto.DateAskRequest;
+import com.tutuchacha.ai.date.dto.DateAskView;
 import com.tutuchacha.ai.date.dto.DateProfileRequest;
 import com.tutuchacha.ai.date.dto.DateProfileView;
 import com.tutuchacha.ai.date.dto.DateTargetRequest;
@@ -32,10 +34,12 @@ public class DateController {
 
     private final DateService dateService;
     private final DateAdviceService adviceService;
+    private final DateAskService askService;
 
-    public DateController(DateService dateService, DateAdviceService adviceService) {
+    public DateController(DateService dateService, DateAdviceService adviceService, DateAskService askService) {
         this.dateService = dateService;
         this.adviceService = adviceService;
+        this.askService = askService;
     }
 
     @Operation(summary = "我的画像", description = "未建档返回 data=null",
@@ -96,5 +100,12 @@ public class DateController {
     public Result<List<DateAdviceView>> adviceHistory(@RequestParam Long targetId,
                                                       Authentication authentication) {
         return Result.ok(adviceService.history(authentication.getName(), targetId));
+    }
+
+    @Operation(summary = "约会问答", description = "「今天去哪玩 / 晚上吃什么」→ 建议 + 高德地点",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/ask")
+    public Result<DateAskView> ask(@Valid @RequestBody DateAskRequest request, Authentication authentication) {
+        return Result.ok(askService.ask(authentication.getName(), request));
     }
 }

@@ -97,6 +97,7 @@ export interface DateSpot {
   category: string
   location: string
   rating: string
+  distance: string
 }
 
 export interface DateAdvice {
@@ -129,4 +130,30 @@ export function createDateAdvice(targetId: number) {
 /** 同一对象最近 5 条建议，倒序 */
 export function listDateAdvice(targetId: number) {
   return request<DateAdvice[]>(`/date/advice?targetId=${targetId}`)
+}
+
+export interface DateAskInput {
+  question: string
+  area?: string
+  targetId?: number
+}
+
+export interface DateAskResult {
+  reply: string
+  area: string
+  city: string
+  keywords: string[]
+  spots: DateSpot[]
+  model: string
+  promptTokens: number
+  completionTokens: number
+  latencyMs: number
+}
+
+/** 约会问答：模型建议 + 按城市/区域搜高德，可能 5~15s */
+export function askDateAssistant(input: DateAskInput) {
+  return request<DateAskResult>('/date/ask', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }

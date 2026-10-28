@@ -1,7 +1,7 @@
 # 恋爱助手（date）
 
-> D-01 建档；D-02 AI 建议 + 高德地点。定位是「收集信息 → AI 给选择 → 执行 → 回填反馈 → 逐轮优化」，
-> 不是角色陪伴。D-03 做反馈闭环与阶段推进。
+> D-01 建档；D-02 AI 建议 + 高德地点；D-03 问答式地点推荐（「今天去哪玩 / 晚上吃什么」）。
+> 定位是「收集信息 → AI 给选择 → 执行 → 回填反馈 → 逐轮优化」，不是角色陪伴。反馈闭环在 D-04。
 > 原则：只优化表达与节奏，不做操控话术、不伪造身份、不收集对方隐私。
 
 ## 0. 速览（做 D-03 / 改恋爱助手只读这节）
@@ -14,6 +14,10 @@
 - 建议：`POST /api/date/advice` 一次模型调用出结构化 JSON（目标 / 3 动作 / 话术 / 禁忌 / 成功判断），
   再按 `city` 查高德 POI 补 1~2 个地点；结果落 `date_advice`，同对象保留最近 5 条
 - 高德 key 只在后端（`app.date.amap-key`，本机放 `application-local.yml`），查询失败降级为空地点、不影响建议
+- 问答：`POST /api/date/ask` 先让模型解析 `{reply, area, keywords}`；有 area → `geocode` + `around`（3km，按距离），
+  无 area → `place/text` 按城市搜；不落库，只返回建议 + 地点（默认 4 家，`ask-spot-limit`）
+- 模型输出非 JSON → 降级：整段文本当回复 + 默认关键词（餐厅/公园），不 502；高德失败降级空地点
+- 区域定位：地理编码只到区县/城市粒度时（如「西湖」落到区政府），改用该区域首个 POI 中心再搜周边
 - 越权 403、不存在 404；`name` 必填，`age` 限 18~99
 
 ## 1. 表（V9 + V10）
@@ -39,10 +43,14 @@
 | `DELETE` | `/api/date/targets/{id}` | 删除，非本人 403 |
 | `POST` | `/api/date/advice` | 生成建议：`{"targetId":1}`；模型输出非法 JSON → 502 |
 | `GET` | `/api/date/advice?targetId=1` | 最近 5 条，倒序；非本人 403 |
+| `POST` | `/api/date/ask` | 问答：`{"question":"…","area":"西湖","targetId":1}`；`area`/`targetId` 可选 |
 
 `POST /advice` 的响应字段：`goal`、`actions[{title,detail,timing}]`、`scripts[{scene,text}]`、
-`avoid[]`、`success`、`spots[{name,address,category,location,rating}]`、`model`、`promptTokens`、
+`avoid[]`、`success`、`spots[{name,address,category,location,rating,distance}]`、`model`、`promptTokens`、
 `completionTokens`、`latencyMs`、`createdAt`。前端按 `location` 拼高德 URI 打开地图。
+
+`POST /ask` 的响应字段：`reply`（≤120 字建议）、`area`、`city`、`keywords[]`、`spots[]`（带 `distance`）、
+`model`、token 与 `latencyMs`。不落库；`question` 空 → 400；模型输出非 JSON 时降级为纯文本回复。
 
 ## 3. 前端结构
 
@@ -50,6 +58,8 @@
 - 右栏：选中对象的阶段、联系途径、最近联系、兴趣、雷点、备注
 - `AI 下一步`：目标块 + 3 个动作（编号 + 时机）+ 话术（一键复制）+ 禁忌 chips + 成功判断 +
   地点卡（名称/类别/地址/评分，点开高德）+ 模型与 token 元信息 + 历史下拉
+- `问问助手`：快捷问题 + 输入框（问题 + 可选区域）+ 消息气泡；助手气泡内嵌地点卡（含距离），
+  切换对象时清空对话；问答不写库，刷新即丢
 - 两个 `el-dialog`：档案表单、对象表单（阶段下拉用 `stageOptions`，日期用 `value-format="YYYY-MM-DD"`）
 - 阶段标签按 `stage` 小写类名配色（`chatting/invited/dating/together/paused`）
 
@@ -57,14 +67,16 @@
 
 - `DateAssistantTest` 4/4：档案 upsert 与按人隔离、对象 CRUD + 越权 403、非法阶段 400、空称呼 400
 - `DateAdviceTest` 4/4：结构化字段 + 地点补全、越权 403/缺失 404、空 targetId 400、模型输出非 JSON → 502
-- 真实调用：`demo` 对小周（杭州/聊天中）生成建议，qwen-plus 574 tok / 13.5s，3 动作 2 话术 3 禁忌 2 地点
-  （漫步山丘露营咖啡、rich coffee 猫咖），前端渲染、复制话术、重新生成与历史切换均正常
-- 全量后端 **130/130**；`npm run typecheck` 通过
-- 高德 Web API 已验证可用（`place/text` `status=1`），key 只在 `application-local.yml`，未入库
+- `DateAskTest` 5/5：区域走周边（带距离、不调城市搜索）、无区域走城市搜索、空问题 400、越权 403、
+  模型输出非 JSON 降级为纯文本 + 默认关键词
+- 真实问答：`demo` 问「今天去哪里玩，晚上吃个饭」+ 区域「西湖」，qwen-plus 65~73 tok / 2.6~3.1s，
+  回复含散步 + 晚饭安排，返回 4 家 3km 内地点（日料 / 杭帮菜 / 展览），距离 573~2513m，前端气泡渲染正常
+- 全量后端 **135/135**；`npm run typecheck` 通过
+- 高德 Web API 已验证可用（`place/text`、`geocode`、`place/around` 均 `status=1`），key 只在 `application-local.yml`，未入库
 
 ## 5. 下一步
 
-- D-03：`date_action`（待办/执行记录）+ `date_feedback`（对方反应），复盘接口回答「继续 / 换策略 / 降速」，
+- D-04：`date_action`（待办/执行记录）+ `date_feedback`（对方反应），复盘接口回答「继续 / 换策略 / 降速」，
   并允许推进或回退 `date_target.stage`；时间线复用 `date_advice` 历史
-- D-04：右侧时间线（建档 → 建议 → 执行 → 反馈）与阶段变更记录
-- 可选：建议结果加「有用 / 没用」反馈，用于后续提示词调优
+- D-05：右侧时间线（建档 → 建议 → 执行 → 反馈）与阶段变更记录
+- 可选：问答结果加「换一批 / 就选这家」，把选择写回执行记录

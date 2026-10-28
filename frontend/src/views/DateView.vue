@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Calendar, CopyDocument, Delete, Edit, Location, Plus, Position, Refresh, Star } from '@element-plus/icons-vue'
+import { Aim, Calendar, ChatDotRound, CopyDocument, Delete, Edit, Location, Plus, Position, Refresh, Star } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
 import {
+  askDateAssistant,
   createDateAdvice,
   createDateTarget,
   deleteDateTarget,
@@ -14,7 +15,7 @@ import {
   stageOptions,
   updateDateTarget,
 } from '@/api/date'
-import type { DateAdvice, DateProfile, DateTarget, DateTargetInput } from '@/api/date'
+import type { DateAdvice, DateProfile, DateSpot, DateTarget, DateTargetInput } from '@/api/date'
 
 const profile = ref<DateProfile | null>(null)
 const targets = ref<DateTarget[]>([])
@@ -214,7 +215,67 @@ function amapLink(location: string, name: string) {
     : ''
 }
 
-watch(selectedId, (id) => void loadAdvice(id))
+interface AskMessage {
+  role: 'user' | 'assistant'
+  text: string
+  spots?: DateSpot[]
+  meta?: string
+}
+
+const QUICK_ASKS = [
+  '今天去哪里玩，晚上吃个饭',
+  '周末想约她出去，安排半天',
+  '第一次见面去哪比较自然',
+  '想找家安静的餐厅聊天',
+]
+
+const messages = ref<AskMessage[]>([])
+const question = ref('')
+const area = ref('')
+const asking = ref(false)
+const msgsEl = ref<HTMLElement | null>(null)
+const lastArea = ref('')
+
+async function scrollBottom() {
+  await nextTick()
+  if (msgsEl.value) msgsEl.value.scrollTop = msgsEl.value.scrollHeight
+}
+
+async function ask(text?: string) {
+  const q = (text ?? question.value).trim()
+  if (!q || asking.value) return
+  messages.value.push({ role: 'user', text: q })
+  question.value = ''
+  asking.value = true
+  await scrollBottom()
+  try {
+    const res = await askDateAssistant({
+      question: q,
+      area: area.value.trim() || undefined,
+      targetId: selected.value?.id,
+    })
+    lastArea.value = res.area
+    messages.value.push({
+      role: 'assistant',
+      text: res.reply || '这次没想好，换个说法再问一次？',
+      spots: res.spots,
+      meta: [res.city || '未填城市', res.area ? `周边 ${res.area}` : '全城', (res.latencyMs / 1000).toFixed(1) + 's']
+        .filter(Boolean)
+        .join(' · '),
+    })
+  } catch (err) {
+    messages.value.push({ role: 'assistant', text: message(err, '推荐失败，请稍后再问一次') })
+  } finally {
+    asking.value = false
+    await scrollBottom()
+  }
+}
+
+watch(selectedId, (id) => {
+  void loadAdvice(id)
+  messages.value = []
+  lastArea.value = ''
+})
 onMounted(load)
 </script>
 
@@ -223,7 +284,7 @@ onMounted(load)
     <LearningNote
       title="恋爱助手 = 建档 + 策略 + 反馈"
       :points="['先写清自己的画像与城市', '每个对象单独建档，按阶段给建议', '执行后回填反应，AI 再调整']"
-      next="D-02 已接通：AI 建议 + 高德地点；D-03 回填对方反应"
+      next="D-03 已接通：问问助手问答 + 周边地点；D-04 回填对方反应"
     />
 
     <div class="page-head">
@@ -361,6 +422,68 @@ onMounted(load)
               <el-icon><Calendar /></el-icon>
               {{ selected.notes }}
             </p>
+          </div>
+
+          <div class="ask card">
+            <div class="card-top">
+              <strong><el-icon><ChatDotRound /></el-icon> 问问助手</strong>
+              <span class="ask-hint">按城市与区域找地方</span>
+            </div>
+
+            <div v-if="!messages.length" class="ask-quick">
+              <button v-for="q in QUICK_ASKS" :key="q" @click="ask(q)">{{ q }}</button>
+            </div>
+
+            <div v-else ref="msgsEl" class="msgs">
+              <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
+                <div class="bubble">
+                  <p>{{ m.text }}</p>
+                  <div v-if="m.spots && m.spots.length" class="spot-list">
+                    <a
+                      v-for="spot in m.spots"
+                      :key="spot.name"
+                      class="spot mini"
+                      :href="amapLink(spot.location, spot.name)"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <div class="spot-top">
+                        <b>{{ spot.name }}</b>
+                        <span v-if="spot.rating" class="rating">{{ spot.rating }}</span>
+                      </div>
+                      <p>{{ spot.address || '地址未提供' }}</p>
+                      <span class="spot-cat">
+                        {{ spot.category || '地点' }}<template v-if="spot.distance"> · {{ spot.distance }}m</template> · 高德打开
+                      </span>
+                    </a>
+                  </div>
+                  <span v-if="m.meta" class="msg-meta">{{ m.meta }}</span>
+                </div>
+              </div>
+              <div v-if="asking" class="msg assistant">
+                <div class="bubble typing">正在按区域查附近地点…</div>
+              </div>
+            </div>
+
+            <div class="ask-bar">
+              <el-input
+                v-model="question"
+                size="small"
+                maxlength="200"
+                placeholder="今天去哪里玩，晚上吃个饭"
+                @keyup.enter="ask()"
+              />
+              <el-input
+                v-model="area"
+                size="small"
+                class="ask-area"
+                maxlength="20"
+                placeholder="区域（可选）西湖"
+                @keyup.enter="ask()"
+              />
+              <el-button size="small" type="primary" round :loading="asking" @click="ask()">发送</el-button>
+            </div>
+            <p v-if="lastArea" class="ask-foot">本次按「{{ lastArea }}」周边 3km 找的地方</p>
           </div>
 
           <div class="advice card">
@@ -929,6 +1052,135 @@ onMounted(load)
   color: #5f6377;
   font-size: 11px;
   line-height: 1.7;
+}
+
+.ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.ask .card-top {
+  gap: 8px;
+}
+
+.ask-hint {
+  color: var(--xy-muted);
+  font-size: 9.5px;
+}
+
+.ask-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ask-quick button {
+  padding: 4px 10px;
+  border: 1px solid var(--xy-line);
+  border-radius: 999px;
+  background: #fbfbfe;
+  color: #5a5e70;
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.ask-quick button:hover {
+  border-color: #cfc4ff;
+  color: var(--xy-violet);
+}
+
+.msgs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.msg {
+  display: flex;
+}
+
+.msg.user {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: 86%;
+  padding: 8px 11px;
+  border-radius: 12px;
+  background: #fbfbfe;
+  border: 1px solid var(--xy-line);
+}
+
+.msg.user .bubble {
+  border-color: transparent;
+  background: var(--xy-violet-soft);
+}
+
+.bubble p {
+  color: #4d5060;
+  font-size: 11.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.msg.assistant .bubble {
+  max-width: 94%;
+}
+
+.bubble.typing {
+  color: var(--xy-muted);
+  font-size: 10.5px;
+}
+
+.spot-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.spot.mini {
+  padding: 7px 9px;
+  background: #fff;
+}
+
+.spot.mini .spot-top b {
+  font-size: 11px;
+}
+
+.spot.mini .spot-cat {
+  margin-top: 3px;
+}
+
+.msg-meta {
+  display: block;
+  margin-top: 6px;
+  color: #a7aab8;
+  font-size: 9px;
+}
+
+.ask-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ask-bar :deep(.el-input) {
+  flex: 1;
+  min-width: 0;
+}
+
+.ask-bar .ask-area {
+  flex: 0 0 132px;
+}
+
+.ask-foot {
+  color: #a7aab8;
+  font-size: 9px;
 }
 
 .advice {

@@ -115,6 +115,8 @@ app:
     amap-base-url: ${AMAP_BASE_URL:https://restapi.amap.com}
     # 每次建议最多带几个地点
     spot-limit: ${DATE_SPOT_LIMIT:2}
+    # 问答式推荐一次给几家
+    ask-spot-limit: ${DATE_ASK_SPOT_LIMIT:4}
   rag:
     # 文档落盘目录，相对启动目录；生产由 compose 挂卷
     upload-dir: ${UPLOAD_DIR:./uploads}

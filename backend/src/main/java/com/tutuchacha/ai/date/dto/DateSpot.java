@@ -9,6 +9,12 @@ public record DateSpot(
         @Schema(description = "地址") String address,
         @Schema(description = "类别，取高德 type 最后一段") String category,
         @Schema(description = "经纬度 lng,lat") String location,
-        @Schema(description = "评分，高德没给则为空") String rating
+        @Schema(description = "评分，高德没给则为空") String rating,
+        @Schema(description = "距查询中心多少米，仅周边搜索有值") String distance
 ) {
+
+    /** 文本搜索没有距离。 */
+    public static DateSpot text(String name, String address, String category, String location, String rating) {
+        return new DateSpot(name, address, category, location, rating, "");
+    }
 }

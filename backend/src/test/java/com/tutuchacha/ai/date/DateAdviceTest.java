@@ -79,7 +79,7 @@ class DateAdviceTest {
         when(aiGateway.complete(any()))
                 .thenReturn(new AiChatResponse(AI_JSON, "qwen-plus", 120, 180, 900));
         when(amapClient.search(anyString(), anyString(), anyInt()))
-                .thenReturn(List.of(new DateSpot("某某咖啡", "文三路 1 号", "咖啡厅", "120.1,30.2", "4.6")));
+                .thenReturn(List.of(new DateSpot("某某咖啡", "文三路 1 号", "咖啡厅", "120.1,30.2", "4.6", "")));
     }
 
     private void seedUser(String username) {
