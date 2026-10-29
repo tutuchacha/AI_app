@@ -1,21 +1,38 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Calendar, ChatDotRound, CopyDocument, Delete, Edit, Location, Plus, Position, Refresh, Star } from '@element-plus/icons-vue'
+import { Aim, Calendar, ChatDotRound, CopyDocument, Delete, Edit, Location, MagicStick, Plus, Position, Refresh, Star } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
 import {
   askDateAssistant,
+  createDateAction,
   createDateAdvice,
   createDateTarget,
+  deleteDateAction,
   deleteDateTarget,
   getDateProfile,
+  listDateActions,
   listDateAdvice,
   listDateTargets,
+  reviewDate,
   saveDateProfile,
   stageOptions,
+  updateDateAction,
   updateDateTarget,
 } from '@/api/date'
-import type { DateAdvice, DateProfile, DateSpot, DateTarget, DateTargetInput } from '@/api/date'
+import type {
+  AdviceAction,
+  DateAction,
+  DateActionPatch,
+  DateActionResult,
+  DateActionStatus,
+  DateAdvice,
+  DateProfile,
+  DateReview,
+  DateSpot,
+  DateTarget,
+  DateTargetInput,
+} from '@/api/date'
 
 const profile = ref<DateProfile | null>(null)
 const targets = ref<DateTarget[]>([])
@@ -30,6 +47,17 @@ const editingTargetId = ref<number | null>(null)
 const advices = ref<DateAdvice[]>([])
 const activeAdviceId = ref<number | null>(null)
 const adviceLoading = ref(false)
+const actions = ref<DateAction[]>([])
+const reviewed = ref<DateReview | null>(null)
+const reviewLoading = ref(false)
+
+const RESULT_OPTIONS: { value: DateActionResult; label: string }[] = [
+  { value: 'UNKNOWN', label: '未回填' },
+  { value: 'GOOD', label: '反应不错' },
+  { value: 'NEUTRAL', label: '一般' },
+  { value: 'COLD', label: '有点冷' },
+  { value: 'NO_REPLY', label: '没回复' },
+]
 
 const profileForm = reactive({
   nickname: '',
@@ -271,8 +299,105 @@ async function ask(text?: string) {
   }
 }
 
+async function loadActions(targetId: number | null) {
+  actions.value = []
+  reviewed.value = null
+  if (!targetId) return
+  try {
+    actions.value = await listDateActions(targetId)
+  } catch {
+    actions.value = []
+  }
+}
+
+async function addAction(act: AdviceAction) {
+  if (!selected.value) return
+  try {
+    const created = await createDateAction({
+      targetId: selected.value.id,
+      adviceId: activeAdvice.value?.id ?? null,
+      title: act.title,
+      detail: act.detail,
+    })
+    actions.value = [created, ...actions.value]
+    reviewed.value = null
+    ElMessage.success('已加入待办')
+  } catch (err) {
+    ElMessage.error(message(err, '加入待办失败'))
+  }
+}
+
+async function patchAction(action: DateAction, patch: DateActionPatch) {
+  try {
+    const updated = await updateDateAction(action.id, patch)
+    actions.value = actions.value.map((item) => (item.id === updated.id ? updated : item))
+    reviewed.value = null
+  } catch (err) {
+    ElMessage.error(message(err, '更新失败，请重试'))
+  }
+}
+
+function setActionStatus(action: DateAction, status: DateActionStatus) {
+  void patchAction(action, { status })
+}
+
+function onResultChange(action: DateAction, value: string) {
+  void patchAction(action, { result: value as DateActionResult })
+}
+
+function onNoteChange(action: DateAction, value: string) {
+  void patchAction(action, { note: value })
+}
+
+async function removeAction(action: DateAction) {
+  try {
+    await deleteDateAction(action.id)
+    actions.value = actions.value.filter((item) => item.id !== action.id)
+    reviewed.value = null
+  } catch (err) {
+    ElMessage.error(message(err, '删除失败'))
+  }
+}
+
+async function runReview() {
+  if (!selected.value || reviewLoading.value || !actions.value.length) return
+  reviewLoading.value = true
+  try {
+    reviewed.value = await reviewDate(selected.value.id)
+  } catch (err) {
+    ElMessage.error(message(err, '复盘失败，请重试'))
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+async function applyStage() {
+  const target = selected.value
+  const review = reviewed.value
+  if (!target || !review) return
+  try {
+    const updated = await updateDateTarget(target.id, {
+      name: target.name,
+      channel: target.channel,
+      stage: review.suggestedStage,
+      age: target.age,
+      city: target.city,
+      interests: target.interests,
+      taboos: target.taboos,
+      notes: target.notes,
+      lastContactAt: target.lastContactAt,
+    })
+    targets.value = targets.value.map((item) => (item.id === updated.id ? updated : item))
+    reviewed.value = null
+    ElMessage.success(`阶段已更新为「${updated.stageLabel}」`)
+  } catch (err) {
+    ElMessage.error(message(err, '更新阶段失败'))
+  }
+}
+
 watch(selectedId, (id) => {
   void loadAdvice(id)
+  void loadActions(id)
   messages.value = []
   lastArea.value = ''
 })
@@ -284,7 +409,7 @@ onMounted(load)
     <LearningNote
       title="恋爱助手 = 建档 + 策略 + 反馈"
       :points="['先写清自己的画像与城市', '每个对象单独建档，按阶段给建议', '执行后回填反应，AI 再调整']"
-      next="D-03 已接通：问问助手问答 + 周边地点；D-04 回填对方反应"
+      next="D-04 已接通：执行记录 + 复盘；下一步时间线"
     />
 
     <div class="page-head">
@@ -518,6 +643,7 @@ onMounted(load)
                       <div class="act-top">
                         <b>{{ act.title }}</b>
                         <span v-if="act.timing">{{ act.timing }}</span>
+                        <el-button text size="small" class="act-add" @click="addAction(act)">+ 待办</el-button>
                       </div>
                       <p>{{ act.detail }}</p>
                     </div>
@@ -599,6 +725,102 @@ onMounted(load)
                 生成建议
               </el-button>
             </template>
+          </div>
+
+          <div class="actions card">
+            <div class="card-top">
+              <strong>执行与反馈</strong>
+              <div class="advice-actions">
+                <span class="ask-hint">{{ actions.length ? `${actions.length} 条记录` : '先记一条' }}</span>
+                <el-button
+                  size="small"
+                  round
+                  type="primary"
+                  :loading="reviewLoading"
+                  :disabled="!actions.length"
+                  @click="runReview"
+                >
+                  <el-icon><MagicStick /></el-icon>
+                  复盘
+                </el-button>
+              </div>
+            </div>
+
+            <p v-if="!actions.length" class="advice-empty">
+              点「AI 下一步」里任意动作的「+ 待办」，做完回填对方反应，再让助手判断继续、换策略还是降速。
+            </p>
+
+            <ul v-else class="act-list">
+              <li v-for="a in actions" :key="a.id">
+                <div class="act-head">
+                  <span class="act-status" :class="a.status.toLowerCase()">{{ a.statusLabel }}</span>
+                  <b>{{ a.title }}</b>
+                  <span v-if="a.plannedAt" class="act-date">{{ a.plannedAt.slice(5) }}</span>
+                  <el-button text size="small" type="danger" @click="removeAction(a)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+                <p v-if="a.detail" class="act-detail">{{ a.detail }}</p>
+                <div class="act-tools">
+                  <el-button
+                    v-if="a.status !== 'DONE'"
+                    size="small"
+                    round
+                    @click="setActionStatus(a, 'DONE')"
+                  >
+                    完成
+                  </el-button>
+                  <el-button
+                    v-if="a.status !== 'SKIPPED'"
+                    size="small"
+                    round
+                    text
+                    @click="setActionStatus(a, 'SKIPPED')"
+                  >
+                    跳过
+                  </el-button>
+                  <el-select
+                    :model-value="a.result"
+                    size="small"
+                    class="result-select"
+                    @change="onResultChange(a, $event)"
+                  >
+                    <el-option
+                      v-for="opt in RESULT_OPTIONS"
+                      :key="opt.value"
+                      :label="opt.label"
+                      :value="opt.value"
+                    />
+                  </el-select>
+                  <el-input
+                    :model-value="a.note"
+                    size="small"
+                    class="note-input"
+                    maxlength="200"
+                    placeholder="对方怎么反应（可选）"
+                    @change="onNoteChange(a, $event)"
+                  />
+                </div>
+              </li>
+            </ul>
+
+            <div v-if="reviewed" class="review" :class="reviewed.verdict.toLowerCase()">
+              <div class="review-top">
+                <b>{{ reviewed.verdictLabel }}</b>
+                <span>建议阶段：{{ reviewed.suggestedStageLabel }}</span>
+              </div>
+              <p>{{ reviewed.reason }}</p>
+              <p class="review-next">下一步：{{ reviewed.nextStep }}</p>
+              <el-button
+                v-if="reviewed.stageChanged"
+                size="small"
+                round
+                type="primary"
+                @click="applyStage"
+              >
+                更新阶段为「{{ reviewed.suggestedStageLabel }}」
+              </el-button>
+            </div>
           </div>
         </template>
       </section>
@@ -1413,6 +1635,144 @@ onMounted(load)
   border-color: #cfc4ff;
   background: #f7f4ff;
   color: var(--xy-violet);
+}
+
+.act-add {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.act-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.act-list li {
+  padding: 9px 10px;
+  border: 1px solid var(--xy-line);
+  border-radius: 10px;
+  background: #fbfbfe;
+}
+
+.act-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.act-head b {
+  min-width: 0;
+  flex: 1;
+  font-size: 11.5px;
+}
+
+.act-status {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 9px;
+}
+
+.act-status.planned {
+  background: #fff7e8;
+  color: #a97a2c;
+}
+
+.act-status.done {
+  background: var(--xy-mint-soft);
+  color: var(--xy-mint);
+}
+
+.act-status.skipped {
+  background: #f2f2f6;
+  color: #8b8f9e;
+}
+
+.act-date {
+  color: var(--xy-muted);
+  font-size: 9px;
+}
+
+.act-detail {
+  margin-top: 4px;
+  color: #6a6e80;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.act-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.result-select {
+  width: 96px;
+}
+
+.note-input {
+  min-width: 120px;
+  flex: 1;
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--xy-line);
+  border-left: 3px solid var(--xy-violet);
+  border-radius: 10px;
+  background: #f9f8ff;
+}
+
+.review.continue {
+  border-left-color: var(--xy-mint);
+}
+
+.review.slow_down,
+.review.pause {
+  border-left-color: #e0a04a;
+}
+
+.review.adjust {
+  border-left-color: #cf8a5c;
+}
+
+.review-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.review-top b {
+  font-size: 12px;
+}
+
+.review-top span {
+  color: var(--xy-muted);
+  font-size: 9.5px;
+}
+
+.review p {
+  color: #4d5060;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.review-next {
+  color: #3f4254 !important;
+  font-weight: 600;
+}
+
+.review .el-button {
+  align-self: flex-start;
 }
 
 .advice-empty {

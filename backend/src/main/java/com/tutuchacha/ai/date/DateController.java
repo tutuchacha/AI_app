@@ -1,12 +1,17 @@
 package com.tutuchacha.ai.date;
 
 import com.tutuchacha.ai.common.Result;
+import com.tutuchacha.ai.date.dto.DateActionRequest;
+import com.tutuchacha.ai.date.dto.DateActionUpdateRequest;
+import com.tutuchacha.ai.date.dto.DateActionView;
 import com.tutuchacha.ai.date.dto.DateAdviceRequest;
 import com.tutuchacha.ai.date.dto.DateAdviceView;
 import com.tutuchacha.ai.date.dto.DateAskRequest;
 import com.tutuchacha.ai.date.dto.DateAskView;
 import com.tutuchacha.ai.date.dto.DateProfileRequest;
 import com.tutuchacha.ai.date.dto.DateProfileView;
+import com.tutuchacha.ai.date.dto.DateReviewRequest;
+import com.tutuchacha.ai.date.dto.DateReviewView;
 import com.tutuchacha.ai.date.dto.DateTargetRequest;
 import com.tutuchacha.ai.date.dto.DateTargetView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,11 +40,16 @@ public class DateController {
     private final DateService dateService;
     private final DateAdviceService adviceService;
     private final DateAskService askService;
+    private final DateActionService actionService;
+    private final DateReviewService reviewService;
 
-    public DateController(DateService dateService, DateAdviceService adviceService, DateAskService askService) {
+    public DateController(DateService dateService, DateAdviceService adviceService, DateAskService askService,
+                          DateActionService actionService, DateReviewService reviewService) {
         this.dateService = dateService;
         this.adviceService = adviceService;
         this.askService = askService;
+        this.actionService = actionService;
+        this.reviewService = reviewService;
     }
 
     @Operation(summary = "我的画像", description = "未建档返回 data=null",
@@ -107,5 +117,44 @@ public class DateController {
     @PostMapping("/ask")
     public Result<DateAskView> ask(@Valid @RequestBody DateAskRequest request, Authentication authentication) {
         return Result.ok(askService.ask(authentication.getName(), request));
+    }
+
+    @Operation(summary = "新建执行记录", description = "可来自某条建议的动作，也可手写",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/actions")
+    public Result<DateActionView> createAction(@Valid @RequestBody DateActionRequest request,
+                                               Authentication authentication) {
+        return Result.ok(actionService.create(authentication.getName(), request));
+    }
+
+    @Operation(summary = "执行记录列表", description = "同一对象最近 20 条，新在前",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/actions")
+    public Result<List<DateActionView>> actions(@RequestParam Long targetId, Authentication authentication) {
+        return Result.ok(actionService.list(authentication.getName(), targetId));
+    }
+
+    @Operation(summary = "回填执行与反馈", description = "只改传了的字段；DONE 时写完成时间",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PutMapping("/actions/{id}")
+    public Result<DateActionView> updateAction(@PathVariable Long id,
+                                               @RequestBody DateActionUpdateRequest request,
+                                               Authentication authentication) {
+        return Result.ok(actionService.update(authentication.getName(), id, request));
+    }
+
+    @Operation(summary = "删除执行记录", security = @SecurityRequirement(name = "bearerAuth"))
+    @DeleteMapping("/actions/{id}")
+    public Result<Void> deleteAction(@PathVariable Long id, Authentication authentication) {
+        actionService.delete(authentication.getName(), id);
+        return Result.ok();
+    }
+
+    @Operation(summary = "复盘", description = "最近建议 + 执行反馈 → 继续 / 换策略 / 降速 / 暂停，并建议阶段",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/review")
+    public Result<DateReviewView> review(@Valid @RequestBody DateReviewRequest request,
+                                         Authentication authentication) {
+        return Result.ok(reviewService.review(authentication.getName(), request.targetId()));
     }
 }

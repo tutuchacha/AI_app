@@ -157,3 +157,75 @@ export function askDateAssistant(input: DateAskInput) {
     body: JSON.stringify(input),
   })
 }
+
+export type DateActionStatus = 'PLANNED' | 'DONE' | 'SKIPPED'
+export type DateActionResult = 'UNKNOWN' | 'GOOD' | 'NEUTRAL' | 'COLD' | 'NO_REPLY'
+
+export interface DateAction {
+  id: number
+  targetId: number
+  adviceId: number | null
+  title: string
+  detail: string
+  plannedAt: string
+  status: DateActionStatus
+  statusLabel: string
+  result: DateActionResult
+  resultLabel: string
+  note: string
+  doneAt: string
+  createdAt: string
+}
+
+export interface DateActionInput {
+  targetId: number
+  adviceId?: number | null
+  title: string
+  detail?: string
+  plannedAt?: string
+}
+
+export interface DateActionPatch {
+  status?: DateActionStatus
+  result?: DateActionResult
+  note?: string
+}
+
+/** 执行记录：同一对象最近 20 条，新在前 */
+export function listDateActions(targetId: number) {
+  return request<DateAction[]>(`/date/actions?targetId=${targetId}`)
+}
+
+export function createDateAction(input: DateActionInput) {
+  return request<DateAction>('/date/actions', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateDateAction(id: number, patch: DateActionPatch) {
+  return request<DateAction>(`/date/actions/${id}`, { method: 'PUT', body: JSON.stringify(patch) })
+}
+
+export function deleteDateAction(id: number) {
+  return request<void>(`/date/actions/${id}`, { method: 'DELETE' })
+}
+
+export interface DateReview {
+  verdict: 'CONTINUE' | 'ADJUST' | 'SLOW_DOWN' | 'PAUSE'
+  verdictLabel: string
+  reason: string
+  nextStep: string
+  suggestedStage: DateStage
+  suggestedStageLabel: string
+  stageChanged: boolean
+  model: string
+  promptTokens: number
+  completionTokens: number
+  latencyMs: number
+}
+
+/** 复盘：最近建议 + 执行反馈 → 继续 / 换策略 / 降速 / 暂停 */
+export function reviewDate(targetId: number) {
+  return request<DateReview>('/date/review', {
+    method: 'POST',
+    body: JSON.stringify({ targetId }),
+  })
+}
