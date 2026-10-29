@@ -1,20 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Coin, DataLine, Refresh, Timer, Warning } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
 import { getUsage, type UsageView } from '@/api/metrics'
 
 const GRAFANA_URL = 'http://192.168.101.137:3000'
+const REFRESH_MS = 30000
 
 const usage = ref<UsageView | null>(null)
 const loading = ref(false)
 const error = ref('')
+const updatedAt = ref('')
+let timer: number | undefined
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   error.value = ''
   try {
     usage.value = await getUsage(7)
+    updatedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
   } catch (err) {
     error.value = err instanceof Error ? err.message : '用量数据加载失败'
   } finally {
@@ -22,7 +26,23 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  // 30 秒静默刷新；页面切到后台时跳过，回来立刻补一次
+  timer = window.setInterval(() => {
+    if (!document.hidden) void load(true)
+  }, REFRESH_MS)
+  document.addEventListener('visibilitychange', onVisible)
+})
+
+function onVisible() {
+  if (!document.hidden) void load(true)
+}
+
+onBeforeUnmount(() => {
+  if (timer) window.clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisible)
+})
 
 function formatTokens(value: number): string {
   if (value >= 10000) return `${(value / 1000).toFixed(1)}k`
@@ -135,10 +155,13 @@ const sourceText = computed(() => {
             <h3>近 7 天调用量</h3>
             <p>单位：次 / 天，只统计已完成的模型回复</p>
           </div>
-          <el-button text size="small" :loading="loading" @click="load">
-            <el-icon><Refresh /></el-icon>
-            刷新
-          </el-button>
+          <div class="head-right">
+            <span v-if="updatedAt" class="updated">更新于 {{ updatedAt }}</span>
+            <el-button text size="small" :loading="loading" @click="load()">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+          </div>
         </div>
 
         <div class="chart">
@@ -293,6 +316,17 @@ const sourceText = computed(() => {
 
 .card-head p {
   margin-top: 3px;
+  color: var(--xy-muted);
+  font-size: 10px;
+}
+
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.updated {
   color: var(--xy-muted);
   font-size: 10px;
 }

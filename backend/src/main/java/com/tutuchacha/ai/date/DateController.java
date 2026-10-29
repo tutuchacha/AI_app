@@ -14,6 +14,7 @@ import com.tutuchacha.ai.date.dto.DateReviewRequest;
 import com.tutuchacha.ai.date.dto.DateReviewView;
 import com.tutuchacha.ai.date.dto.DateTargetRequest;
 import com.tutuchacha.ai.date.dto.DateTargetView;
+import com.tutuchacha.ai.date.dto.DateTimelineEvent;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,14 +43,17 @@ public class DateController {
     private final DateAskService askService;
     private final DateActionService actionService;
     private final DateReviewService reviewService;
+    private final DateTimelineService timelineService;
 
     public DateController(DateService dateService, DateAdviceService adviceService, DateAskService askService,
-                          DateActionService actionService, DateReviewService reviewService) {
+                          DateActionService actionService, DateReviewService reviewService,
+                          DateTimelineService timelineService) {
         this.dateService = dateService;
         this.adviceService = adviceService;
         this.askService = askService;
         this.actionService = actionService;
         this.reviewService = reviewService;
+        this.timelineService = timelineService;
     }
 
     @Operation(summary = "我的画像", description = "未建档返回 data=null",
@@ -156,5 +160,12 @@ public class DateController {
     public Result<DateReviewView> review(@Valid @RequestBody DateReviewRequest request,
                                          Authentication authentication) {
         return Result.ok(reviewService.review(authentication.getName(), request.targetId()));
+    }
+
+    @Operation(summary = "时间线", description = "建档 / 建议 / 执行反馈 / 阶段变更，按时间倒序",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/timeline")
+    public Result<List<DateTimelineEvent>> timeline(@RequestParam Long targetId, Authentication authentication) {
+        return Result.ok(timelineService.timeline(authentication.getName(), targetId));
     }
 }

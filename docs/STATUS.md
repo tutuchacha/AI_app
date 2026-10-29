@@ -3,16 +3,17 @@
 > 仪表盘：≤30 行 / 1.5k 字符。历史去 progress，决策去 ADR。
 
 - 更新时间：2026-10-29
-- 阶段：M3 完成；M4 客服闭环完成；**D-01~04 恋爱助手闭环（建档 → 建议 → 问答 → 执行反馈）**
-- 数据库：VM `192.168.101.137:5432/ai_app`（PG16 + pgvector），Flyway `V1`~`V11` success
+- 阶段：M3 完成；M4 客服闭环完成；**D-01~05 恋爱助手闭环（建档 → 建议 → 问答 → 执行反馈 → 时间线）**
+- 数据库：VM `192.168.101.137:5432/ai_app`（PG16 + pgvector），Flyway `V1`~`V12` success
 - 客服：`/support` 选库 + 引用溯源 + 低置信兜底 + 工单（OPEN/CLOSED）；阈值 0.6 由 policy 下发
-- 恋爱助手：`/date` 建档 +「AI 下一步」+「问问助手」问答（区域 3km）+「执行与反馈」复盘
-  - 接口：`/api/date/{profile,targets,advice,ask,actions,review}`；口径 `docs/modules/date.md`
-- 测试：后端 **141/141**，前端 typecheck 通过；模型 qwen-plus / text-embedding-v3
+- 恋爱助手：`/date` 建档 +「AI 下一步」+「问问助手」问答（区域 3km）+「执行与反馈」复盘 + 时间线
+  - 接口：`/api/date/{profile,targets,advice,ask,actions,review,timeline}`；口径 `docs/modules/date.md`
+- 工作台 `/dashboard` 用量 30s 静默刷新
+- 测试：后端 **144/144**，typecheck 通过；模型 qwen-plus / text-embedding-v3
 
 ## 下一步
 
-1. D-05 时间线与阶段变更记录
+1. 站内注册 + 用量看板补口径；微信扫码另立 ADR
 2. 可选：问答结果「就选这家」写进执行记录
 
 ## 已知限制

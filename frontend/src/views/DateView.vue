@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim, Calendar, ChatDotRound, CopyDocument, Delete, Edit, Location, MagicStick, Plus, Position, Refresh, Star } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
+import { CITY_OPTIONS } from '@/constants/cities'
 import {
   askDateAssistant,
   createDateAction,
@@ -11,6 +12,7 @@ import {
   deleteDateAction,
   deleteDateTarget,
   getDateProfile,
+  getDateTimeline,
   listDateActions,
   listDateAdvice,
   listDateTargets,
@@ -32,6 +34,7 @@ import type {
   DateSpot,
   DateTarget,
   DateTargetInput,
+  DateTimelineEvent,
 } from '@/api/date'
 
 const profile = ref<DateProfile | null>(null)
@@ -48,6 +51,7 @@ const advices = ref<DateAdvice[]>([])
 const activeAdviceId = ref<number | null>(null)
 const adviceLoading = ref(false)
 const actions = ref<DateAction[]>([])
+const timeline = ref<DateTimelineEvent[]>([])
 const reviewed = ref<DateReview | null>(null)
 const reviewLoading = ref(false)
 
@@ -90,6 +94,7 @@ const activeAdvice = computed(
   () => advices.value.find((item) => item.id === activeAdviceId.value) ?? advices.value[0] ?? null,
 )
 const adviceTime = (iso: string) => (iso ? iso.slice(5, 16).replace('T', ' ') : '')
+const timelineTime = adviceTime
 
 const subtitle = computed(() => {
   if (!profileReady.value) return '先写下自己的档案，AI 才能按你的性格和城市给建议'
@@ -220,6 +225,7 @@ async function generateAdvice() {
     const advice = await createDateAdvice(selected.value.id)
     advices.value = [advice, ...advices.value.filter((item) => item.id !== advice.id)].slice(0, 5)
     activeAdviceId.value = advice.id
+    void loadTimeline(selected.value.id)
     ElMessage.success('建议已生成')
   } catch (err) {
     ElMessage.error(message(err, '生成失败，请重试'))
@@ -310,6 +316,16 @@ async function loadActions(targetId: number | null) {
   }
 }
 
+async function loadTimeline(targetId: number | null) {
+  timeline.value = []
+  if (!targetId) return
+  try {
+    timeline.value = await getDateTimeline(targetId)
+  } catch {
+    timeline.value = []
+  }
+}
+
 async function addAction(act: AdviceAction) {
   if (!selected.value) return
   try {
@@ -321,6 +337,7 @@ async function addAction(act: AdviceAction) {
     })
     actions.value = [created, ...actions.value]
     reviewed.value = null
+    void loadTimeline(selected.value.id)
     ElMessage.success('已加入待办')
   } catch (err) {
     ElMessage.error(message(err, '加入待办失败'))
@@ -332,6 +349,7 @@ async function patchAction(action: DateAction, patch: DateActionPatch) {
     const updated = await updateDateAction(action.id, patch)
     actions.value = actions.value.map((item) => (item.id === updated.id ? updated : item))
     reviewed.value = null
+    if (selected.value) void loadTimeline(selected.value.id)
   } catch (err) {
     ElMessage.error(message(err, '更新失败，请重试'))
   }
@@ -354,6 +372,7 @@ async function removeAction(action: DateAction) {
     await deleteDateAction(action.id)
     actions.value = actions.value.filter((item) => item.id !== action.id)
     reviewed.value = null
+    if (selected.value) void loadTimeline(selected.value.id)
   } catch (err) {
     ElMessage.error(message(err, '删除失败'))
   }
@@ -386,9 +405,11 @@ async function applyStage() {
       taboos: target.taboos,
       notes: target.notes,
       lastContactAt: target.lastContactAt,
+      stageSource: 'REVIEW',
     })
     targets.value = targets.value.map((item) => (item.id === updated.id ? updated : item))
     reviewed.value = null
+    void loadTimeline(updated.id)
     ElMessage.success(`阶段已更新为「${updated.stageLabel}」`)
   } catch (err) {
     ElMessage.error(message(err, '更新阶段失败'))
@@ -398,6 +419,7 @@ async function applyStage() {
 watch(selectedId, (id) => {
   void loadAdvice(id)
   void loadActions(id)
+  void loadTimeline(id)
   messages.value = []
   lastArea.value = ''
 })
@@ -822,6 +844,27 @@ onMounted(load)
               </el-button>
             </div>
           </div>
+
+          <div class="timeline card">
+            <div class="card-top">
+              <strong>时间线</strong>
+              <span class="ask-hint">{{ timeline.length ? `${timeline.length} 条记录` : '从建档开始' }}</span>
+            </div>
+            <ul v-if="timeline.length" class="tl-list">
+              <li v-for="(ev, i) in timeline" :key="ev.type + ev.at + i">
+                <span class="tl-dot" :class="ev.type.toLowerCase()" />
+                <div class="tl-body">
+                  <div class="tl-top">
+                    <span class="tl-type">{{ ev.typeLabel }}</span>
+                    <b>{{ ev.title }}</b>
+                    <span class="tl-time">{{ timelineTime(ev.at) }}</span>
+                  </div>
+                  <p v-if="ev.detail">{{ ev.detail }}</p>
+                </div>
+              </li>
+            </ul>
+            <p v-else class="advice-empty">建档、生成建议、回填反应之后，这里会按时间倒序列出每一步。</p>
+          </div>
         </template>
       </section>
     </div>
@@ -838,7 +881,17 @@ onMounted(load)
           <el-input-number v-model="profileForm.age" :min="18" :max="99" controls-position="right" />
         </el-form-item>
         <el-form-item label="城市">
-          <el-input v-model="profileForm.city" maxlength="40" placeholder="杭州" />
+          <el-select
+            v-model="profileForm.city"
+            class="city-select"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            placeholder="选择城市，或直接输入"
+          >
+            <el-option v-for="c in CITY_OPTIONS" :key="c" :label="c" :value="c" />
+          </el-select>
         </el-form-item>
         <el-form-item label="职业">
           <el-input v-model="profileForm.occupation" maxlength="60" />
@@ -902,7 +955,17 @@ onMounted(load)
           <el-input-number v-model="targetForm.age" :min="18" :max="99" controls-position="right" />
         </el-form-item>
         <el-form-item label="城市">
-          <el-input v-model="targetForm.city" maxlength="40" />
+          <el-select
+            v-model="targetForm.city"
+            class="city-select"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            placeholder="选择城市，或直接输入"
+          >
+            <el-option v-for="c in CITY_OPTIONS" :key="c" :label="c" :value="c" />
+          </el-select>
         </el-form-item>
         <el-form-item label="最近联系">
           <el-date-picker
@@ -1773,6 +1836,88 @@ onMounted(load)
 
 .review .el-button {
   align-self: flex-start;
+}
+
+.tl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tl-list li {
+  display: flex;
+  gap: 8px;
+}
+
+.tl-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--xy-violet);
+}
+
+.tl-dot.target {
+  background: #8b8f9e;
+}
+
+.tl-dot.advice {
+  background: var(--xy-violet);
+}
+
+.tl-dot.action {
+  background: var(--xy-mint);
+}
+
+.tl-dot.stage {
+  background: #e0a04a;
+}
+
+.tl-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.tl-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.tl-type {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: #f2f2f8;
+  color: #6a6e80;
+  font-size: 9px;
+}
+
+.tl-top b {
+  min-width: 0;
+  flex: 1;
+  font-size: 11px;
+}
+
+.tl-time {
+  flex: 0 0 auto;
+  color: var(--xy-muted);
+  font-size: 9px;
+}
+
+.tl-body p {
+  margin-top: 3px;
+  color: #6a6e80;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.city-select {
+  width: 100%;
 }
 
 .advice-empty {

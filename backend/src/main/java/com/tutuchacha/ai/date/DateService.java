@@ -30,11 +30,14 @@ public class DateService {
     private final DateProfileMapper profileMapper;
     private final DateTargetMapper targetMapper;
     private final UserMapper userMapper;
+    private final DateStageLogMapper stageLogMapper;
 
-    public DateService(DateProfileMapper profileMapper, DateTargetMapper targetMapper, UserMapper userMapper) {
+    public DateService(DateProfileMapper profileMapper, DateTargetMapper targetMapper, UserMapper userMapper,
+                       DateStageLogMapper stageLogMapper) {
         this.profileMapper = profileMapper;
         this.targetMapper = targetMapper;
         this.userMapper = userMapper;
+        this.stageLogMapper = stageLogMapper;
     }
 
     /** 未建档返回 null，前端据此显示「先完善档案」。 */
@@ -102,8 +105,18 @@ public class DateService {
     public DateTargetView updateTarget(String username, Long id, DateTargetRequest request) {
         User user = requireUser(username);
         DateTarget target = requireOwned(user, id);
+        String before = target.getStage();
         apply(target, request);
         targetMapper.updateById(target);
+        if (!before.equals(target.getStage())) {
+            DateStageLog log = new DateStageLog();
+            log.setUserId(user.getId());
+            log.setTargetId(target.getId());
+            log.setFromStage(before);
+            log.setToStage(target.getStage());
+            log.setSource("REVIEW".equalsIgnoreCase(request.stageSource()) ? "REVIEW" : "MANUAL");
+            stageLogMapper.insert(log);
+        }
         return toView(targetMapper.selectById(id));
     }
 

@@ -44,6 +44,7 @@ export interface DateTargetInput {
   taboos?: string
   notes?: string
   lastContactAt?: string
+  stageSource?: 'MANUAL' | 'REVIEW'
 }
 
 export const stageOptions: { value: DateStage; label: string }[] = [
@@ -228,4 +229,17 @@ export function reviewDate(targetId: number) {
     method: 'POST',
     body: JSON.stringify({ targetId }),
   })
+}
+
+export interface DateTimelineEvent {
+  type: 'TARGET' | 'ADVICE' | 'ACTION' | 'STAGE'
+  typeLabel: string
+  title: string
+  detail: string
+  at: string
+}
+
+/** 时间线：建档 / 建议 / 执行反馈 / 阶段变更，倒序，最多 40 条 */
+export function getDateTimeline(targetId: number) {
+  return request<DateTimelineEvent[]>(`/date/timeline?targetId=${targetId}`)
 }

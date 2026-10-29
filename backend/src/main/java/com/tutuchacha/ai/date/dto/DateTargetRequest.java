@@ -29,6 +29,8 @@ public record DateTargetRequest(
         @Schema(description = "雷点/忌讳", example = "不喜欢被追问前任") String taboos,
         @Size(max = 1000)
         @Schema(description = "其他备注：最近聊了什么、回消息频率") String notes,
-        @Schema(description = "最近一次联系日期", example = "2026-10-26") LocalDate lastContactAt
+        @Schema(description = "最近一次联系日期", example = "2026-10-26") LocalDate lastContactAt,
+        @Schema(description = "阶段来源：MANUAL 手动 / REVIEW 复盘后应用，缺省 MANUAL", example = "REVIEW")
+        String stageSource
 ) {
 }
