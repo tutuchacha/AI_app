@@ -13,6 +13,15 @@ const route = useRoute()
 const username = ref('demo')
 const password = ref('demo1234')
 const loading = ref(false)
+const mode = ref<'login' | 'register'>('login')
+const nickname = ref('')
+const confirm = ref('')
+
+function switchMode(next: 'login' | 'register') {
+  mode.value = next
+  password.value = next === 'register' ? '' : password.value
+  confirm.value = ''
+}
 
 const features = [
   { icon: ChatDotRound, title: '对话', text: 'SSE / WebSocket 双通道' },
@@ -37,6 +46,29 @@ async function submit() {
     await router.push(redirectTarget())
   } catch (error) {
     const message = error instanceof ApiError ? error.message : '登录失败，请稍后重试'
+    ElMessage.error(message)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function submitRegister() {
+  const name = username.value.trim()
+  if (!name || !password.value) {
+    ElMessage.warning('请输入账号和密码')
+    return
+  }
+  if (password.value !== confirm.value) {
+    ElMessage.warning('两次输入的密码不一致')
+    return
+  }
+  loading.value = true
+  try {
+    await auth.register(name, password.value, nickname.value.trim() || undefined)
+    ElMessage.success('注册成功，已自动登录')
+    await router.push(redirectTarget())
+  } catch (error) {
+    const message = error instanceof ApiError ? error.message : '注册失败，请稍后重试'
     ElMessage.error(message)
   } finally {
     loading.value = false
@@ -79,15 +111,29 @@ async function submit() {
     <section class="form-side">
       <div class="form-card fade-up">
         <span class="pill">M1 阶段</span>
-        <h2>欢迎回来</h2>
-        <p class="sub">真实账号登录，token 由后端签发；开发时可开 Mock 离线预览。</p>
+        <h2>{{ mode === 'login' ? '欢迎回来' : '创建账号' }}</h2>
+        <p class="sub">
+          {{ mode === 'login'
+            ? '真实账号登录，token 由后端签发；开发时可开 Mock 离线预览。'
+            : '用户名 3~32 位，密码 8~32 位且含字母与数字；注册后自动登录。' }}
+        </p>
 
-        <form @submit.prevent="submit">
+        <div class="mode-tabs">
+          <button :class="{ on: mode === 'login' }" @click="switchMode('login')">登录</button>
+          <button :class="{ on: mode === 'register' }" @click="switchMode('register')">注册</button>
+        </div>
+
+        <form @submit.prevent="mode === 'login' ? submit() : submitRegister()">
           <label>
             <span>账号</span>
             <el-input v-model="username" size="large" placeholder="输入用户名">
               <template #prefix><el-icon><User /></el-icon></template>
             </el-input>
+          </label>
+
+          <label v-if="mode === 'register'">
+            <span>昵称（可选）</span>
+            <el-input v-model="nickname" size="large" maxlength="20" placeholder="展示用的名字" />
           </label>
 
           <label>
@@ -97,15 +143,21 @@ async function submit() {
             </el-input>
           </label>
 
+          <label v-if="mode === 'register'">
+            <span>确认密码</span>
+            <el-input v-model="confirm" type="password" size="large" show-password placeholder="再输一次" />
+          </label>
+
           <el-button type="primary" size="large" native-type="submit" :loading="loading" class="submit">
-            进入工作台
+            {{ mode === 'login' ? '进入工作台' : '注册并登录' }}
             <el-icon class="arrow"><ArrowRight /></el-icon>
           </el-button>
         </form>
 
         <div class="note">
           <strong>登录方式</strong>
-          默认请求 `/api/auth/login`，JWT 有效期 2 小时；设置 `VITE_USE_MOCK=true` 可离线跳过后端。
+          账号密码走 `/api/auth/register`、`/api/auth/login`，JWT 有效期 2 小时；
+          微信扫码需开放平台资质与回调域名，暂未接入。
         </div>
 
         <p class="demo">演示账号：demo / demo1234（本地库）</p>
@@ -267,6 +319,33 @@ async function submit() {
   color: var(--xy-muted);
   font-size: 12.5px;
   line-height: 1.7;
+}
+
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #f4f3fb;
+}
+
+.mode-tabs button {
+  flex: 1;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #6a6e80;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mode-tabs button.on {
+  background: #fff;
+  color: var(--xy-violet);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(124, 92, 255, 0.16);
 }
 
 form {

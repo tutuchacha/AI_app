@@ -8,12 +8,12 @@
 - 客服：`/support` 选库 + 引用溯源 + 低置信兜底 + 工单（OPEN/CLOSED）；阈值 0.6 由 policy 下发
 - 恋爱助手：`/date` 建档 +「AI 下一步」+「问问助手」问答（区域 3km）+「执行与反馈」复盘 + 时间线
   - 接口：`/api/date/{profile,targets,advice,ask,actions,review,timeline}`；口径 `docs/modules/date.md`
-- 工作台 `/dashboard` 用量 30s 静默刷新
+- 登录页可注册并自动登录；`/dashboard` 用量 30s 静默刷新
 - 测试：后端 **144/144**，typecheck 通过；模型 qwen-plus / text-embedding-v3
 
 ## 下一步
 
-1. 站内注册 + 用量看板补口径；微信扫码另立 ADR
+1. 微信扫码登录（需开放平台资质，另立 ADR）
 2. 可选：问答结果「就选这家」写进执行记录
 
 ## 已知限制

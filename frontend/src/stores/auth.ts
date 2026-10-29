@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { loginApi } from '@/api/auth'
+import { loginApi, registerApi } from '@/api/auth'
 import { clearSession, getNickname, getToken, getUsername, saveSession } from '@/api/http'
 
 /** VITE_USE_MOCK=true 时走本地假登录，便于离线开发 */
@@ -29,6 +29,12 @@ export const useAuthStore = defineStore('auth', () => {
     saveSession(result.token, result.username, result.nickname)
   }
 
+  /** 注册成功后直接登录，少一次手动输入 */
+  async function register(username: string, password: string, nickname?: string) {
+    await registerApi(username, password, nickname)
+    await login(username, password)
+  }
+
   function logout() {
     token.value = ''
     name.value = ''
@@ -36,5 +42,5 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession()
   }
 
-  return { token, name, nickname, isLoggedIn, isMock: USE_MOCK, login, logout }
+  return { token, name, nickname, isLoggedIn, isMock: USE_MOCK, login, register, logout }
 })
