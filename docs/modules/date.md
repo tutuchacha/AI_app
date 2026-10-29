@@ -86,10 +86,10 @@
   回复含散步 + 晚饭安排，返回 4 家 3km 内地点（日料 / 杭帮菜 / 展览），距离 573~2513m，前端气泡渲染正常
 - 全量后端 **141/141**；`npm run typecheck` 通过
 - 高德 Web API 已验证可用（`place/text`、`geocode`、`place/around` 均 `status=1`），key 只在 `application-local.yml`，未入库
-- **未完成**：D-04 的浏览器链路实测（VM `192.168.101.137` 停机，8080 起不来），恢复后补测复盘卡
+- 浏览器实测（demo / 小周）：动作「+ 待办」→ 完成 → 反应「反应不错」→ 备注 → 复盘（CONTINUE，2.4s）
+  → 阶段 MET→CHATTING 一键应用；DB 核对 `date_action` DONE/GOOD + `date_target.stage=CHATTING`，Flyway V11 success
 
 ## 5. 下一步
 
 - D-05：右侧时间线（建档 → 建议 → 执行 → 反馈）与阶段变更记录
-- 恢复 VM 后：浏览器补测「+ 待办 → 完成/反馈 → 复盘 → 更新阶段」整条链路
 - 可选：问答结果加「换一批 / 就选这家」，把选择直接写进执行记录
