@@ -326,6 +326,24 @@ async function loadTimeline(targetId: number | null) {
   }
 }
 
+async function addSpotAction(spot: DateSpot) {
+  if (!selected.value) return
+  try {
+    const created = await createDateAction({
+      targetId: selected.value.id,
+      title: `去${spot.name}`,
+      detail: [spot.address, spot.category].filter(Boolean).join(' · ').slice(0, 200),
+      plannedAt: new Date().toISOString().slice(0, 10),
+    })
+    actions.value = [created, ...actions.value]
+    reviewed.value = null
+    void loadTimeline(selected.value.id)
+    ElMessage.success('已加入待办，做完回填反应再复盘')
+  } catch (err) {
+    ElMessage.error(message(err, '加入待办失败'))
+  }
+}
+
 async function addAction(act: AdviceAction) {
   if (!selected.value) return
   try {
@@ -586,23 +604,26 @@ onMounted(load)
                 <div class="bubble">
                   <p>{{ m.text }}</p>
                   <div v-if="m.spots && m.spots.length" class="spot-list">
-                    <a
-                      v-for="spot in m.spots"
-                      :key="spot.name"
-                      class="spot mini"
-                      :href="amapLink(spot.location, spot.name)"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <div class="spot-top">
-                        <b>{{ spot.name }}</b>
-                        <span v-if="spot.rating" class="rating">{{ spot.rating }}</span>
-                      </div>
-                      <p>{{ spot.address || '地址未提供' }}</p>
-                      <span class="spot-cat">
-                        {{ spot.category || '地点' }}<template v-if="spot.distance"> · {{ spot.distance }}m</template> · 高德打开
-                      </span>
-                    </a>
+                    <div v-for="spot in m.spots" :key="spot.name" class="spot mini">
+                      <a
+                        class="spot-inner"
+                        :href="amapLink(spot.location, spot.name)"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <div class="spot-top">
+                          <b>{{ spot.name }}</b>
+                          <span v-if="spot.rating" class="rating">{{ spot.rating }}</span>
+                        </div>
+                        <p>{{ spot.address || '地址未提供' }}</p>
+                        <span class="spot-cat">
+                          {{ spot.category || '地点' }}<template v-if="spot.distance"> · {{ spot.distance }}m</template> · 高德打开
+                        </span>
+                      </a>
+                      <el-button text size="small" class="spot-add" @click="addSpotAction(spot)">
+                        加为待办
+                      </el-button>
+                    </div>
                   </div>
                   <span v-if="m.meta" class="msg-meta">{{ m.meta }}</span>
                 </div>
@@ -699,24 +720,27 @@ onMounted(load)
               <div v-if="activeAdvice.spots.length" class="advice-block">
                 <h4>约会地点 · {{ activeAdvice.city || '未填城市' }}</h4>
                 <div class="spots">
-                  <a
-                    v-for="spot in activeAdvice.spots"
-                    :key="spot.name"
-                    class="spot"
-                    :href="amapLink(spot.location, spot.name)"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <div class="spot-top">
-                      <b>{{ spot.name }}</b>
-                      <span v-if="spot.rating" class="rating">{{ spot.rating }}</span>
-                    </div>
-                    <p>{{ spot.address || '地址未提供' }}</p>
-                    <span class="spot-cat">
-                      {{ spot.category || '地点' }} · 高德打开
-                      <el-icon><Position /></el-icon>
-                    </span>
-                  </a>
+                  <div v-for="spot in activeAdvice.spots" :key="spot.name" class="spot">
+                    <a
+                      class="spot-inner"
+                      :href="amapLink(spot.location, spot.name)"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <div class="spot-top">
+                        <b>{{ spot.name }}</b>
+                        <span v-if="spot.rating" class="rating">{{ spot.rating }}</span>
+                      </div>
+                      <p>{{ spot.address || '地址未提供' }}</p>
+                      <span class="spot-cat">
+                        {{ spot.category || '地点' }} · 高德打开
+                        <el-icon><Position /></el-icon>
+                      </span>
+                    </a>
+                    <el-button text size="small" class="spot-add" @click="addSpotAction(spot)">
+                      加为待办
+                    </el-button>
+                  </div>
                 </div>
               </div>
 
@@ -1626,6 +1650,19 @@ onMounted(load)
   color: inherit;
   text-decoration: none;
   transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.spot-inner {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.spot-add {
+  margin-top: 4px;
+  padding: 0;
+  height: auto;
+  font-size: 10px;
 }
 
 .spot:hover {
