@@ -1,10 +1,10 @@
 # 恋爱助手（date）
 
-> D-01 建档；D-02 AI 建议 + 高德地点；D-03 问答式地点推荐；D-04 执行记录 + 反馈复盘；D-05 时间线；D-08 城市定位。
+> D-01 建档；D-02 AI 建议 + 高德地点；D-03 问答式地点推荐；D-04 执行记录 + 反馈复盘；D-05 时间线；D-08 城市定位；D-09 右栏分栏。
 > 定位是「收集信息 → AI 给选择 → 执行 → 回填反馈 → 逐轮优化」，不是角色陪伴。
 > 原则：只优化表达与节奏，不做操控话术、不伪造身份、不收集对方隐私。
 
-## 0. 速览（做 D-08 / 改恋爱助手只读这节）
+## 0. 速览（做 D-09 / 改恋爱助手只读这节）
 
 - 入口：`/date`（`DateView.vue`），导航「恋爱助手」；原 `/companion` 与 `CompanionView.vue` 已删
 - 后端包 `com.tutuchacha.ai.date`，前缀 `/api/date`
@@ -13,6 +13,7 @@
 - 城市是档案字段 `date_profile.city`（前端新增对象默认继承），D-02 地点推荐直接当高德 `city` 用
 - 定位回填：`GET /api/date/geo/locate?lng=&lat=` 走高德逆地理（城市去「市」后缀）；
   非法经纬度 400，高德失败返回空串，前端 `CityPicker` 提示手选
+- 右栏分栏：今日（建议）/ 找地点（问答）/ 复盘（执行反馈 + 复盘）/ 时间线；切对象回今日，tab 显示条数
 - 建议：`POST /api/date/advice` 一次模型调用出结构化 JSON（目标 / 3 动作 / 话术 / 禁忌 / 成功判断），
   再按 `city` 查高德 POI 补 1~2 个地点；结果落 `date_advice`，同对象保留最近 5 条
 - 高德 key 只在后端（本机 `application-local.yml`），失败降级空地点
@@ -61,22 +62,21 @@
 | `GET` | `/api/date/timeline?targetId=1` | 时间线：TARGET / ADVICE / ACTION / STAGE，倒序最多 40 条；非本人 403 |
 | `GET` | `/api/date/geo/locate?lng=&lat=` | 逆地理回填城市；非法经纬度 400，高德失败返回空结果 |
 
-`POST /advice` 返回 `goal`、`actions[{title,detail,timing}]`、`scripts[{scene,text}]`、`avoid[]`、`success`、
-`spots[{name,address,category,location,rating,distance}]`、模型/token 元信息；前端按 `location` 拼高德 URI。
+`POST /advice` 返回目标 / 3 动作 / 话术 / 禁忌 / 成功判断 / 地点（含 `rating`、`distance`）与模型元信息；
+前端按 `location` 拼高德 URI。
 
-`POST /ask` 返回 `reply`、`area`、`city`、`keywords[]`、`spots[]`（带 `distance`）、模型/token 元信息；
-不落库；`question` 空 → 400；模型非 JSON 时降级为纯文本。
+`POST /ask` 返回 `reply`、`area`、`city`、`keywords[]`、`spots[]`；不落库，空问题 400，非 JSON 降级纯文本。
 
 ## 3. 前端结构
 
-- `AI 下一步`：目标 + 3 动作（时机）+ 话术（复制）+ 禁忌 + 成功判断 + 地点卡（点开高德）+ 元信息 + 历史
-- `问问助手`：快捷问题 + 输入框（问题 + 可选区域）+ 气泡内嵌地点卡；切换对象清空，问答不落库；
-  地点卡与建议地点都有「加为待办」，直接写进执行记录
+- 右栏四栏：今日 / 找地点 / 复盘 / 时间线（吸顶 tab，带条数；切对象回今日）
+- `AI 下一步`：目标 + 3 动作 + 话术 + 禁忌 + 成功判断 + 地点卡 + 元信息 + 历史
+- `问问助手`：快捷问题 + 区域输入 + 气泡地点卡；切对象清空；地点卡可「加为待办」
 - `执行与反馈`：动作旁「+ 待办」→ 标完成/跳过、选反应、填备注；底部「复盘」出判定卡，
   阶段不同时给「更新阶段」（`PUT /targets/{id}` + `stageSource=REVIEW`）
 - `时间线`：四类事件合流倒序，圆点按类型配色；增删改后自动重拉
-- 表单：阶段 `stageOptions`、城市用 `CityPicker`（`CITY_OPTIONS` 可搜索可自填 +「用当前位置」）、日期 `YYYY-MM-DD`；
-  阶段标签按小写类名配色
+- 表单：阶段 `stageOptions`、城市 `CityPicker`（可搜索可自填 + 定位）、日期 `YYYY-MM-DD`
+- 阶段标签按小写类名配色
 
 ## 4. 验证记录（2026-10-28）
 
@@ -92,6 +92,7 @@
 - 高德 text/geocode/around/regeo 均可用，key 只在 `application-local.yml`
 - 浏览器实测（demo/小周）：待办 → 完成 → 反应 → 复盘 CONTINUE → 阶段 MET→CHATTING；DB 与 Flyway V11 核对
 - 定位实测：西湖坐标 → 杭州拱墅区（真实高德）；`CityPicker` 回填「杭州」，拒绝权限时提示手选
+- 分栏实测：四栏切换正常，问答后「找地点」badge=1，复盘 4 / 时间线 8 条；切换默认今日
 
 ## 5. 下一步
 

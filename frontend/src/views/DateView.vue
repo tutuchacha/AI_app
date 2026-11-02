@@ -54,6 +54,9 @@ const actions = ref<DateAction[]>([])
 const timeline = ref<DateTimelineEvent[]>([])
 const reviewed = ref<DateReview | null>(null)
 const reviewLoading = ref(false)
+type DetailTab = 'today' | 'places' | 'review' | 'timeline'
+const activeTab = ref<DetailTab>('today')
+const detailEl = ref<HTMLElement | null>(null)
 
 const RESULT_OPTIONS: { value: DateActionResult; label: string }[] = [
   { value: 'UNKNOWN', label: '未回填' },
@@ -270,6 +273,18 @@ const asking = ref(false)
 const msgsEl = ref<HTMLElement | null>(null)
 const lastArea = ref('')
 
+const detailTabs = computed(() => [
+  { name: 'today' as DetailTab, label: '今日', count: 0 },
+  { name: 'places' as DetailTab, label: '找地点', count: messages.value.filter((m) => m.role === 'assistant').length },
+  { name: 'review' as DetailTab, label: '复盘', count: actions.value.length },
+  { name: 'timeline' as DetailTab, label: '时间线', count: timeline.value.length },
+])
+
+function switchTab(name: DetailTab) {
+  activeTab.value = name
+  detailEl.value?.scrollTo({ top: 0 })
+}
+
 async function scrollBottom() {
   await nextTick()
   if (msgsEl.value) msgsEl.value.scrollTop = msgsEl.value.scrollHeight
@@ -440,6 +455,8 @@ watch(selectedId, (id) => {
   void loadTimeline(id)
   messages.value = []
   lastArea.value = ''
+  activeTab.value = 'today'
+  detailEl.value?.scrollTo({ top: 0 })
 })
 onMounted(load)
 </script>
@@ -449,7 +466,7 @@ onMounted(load)
     <LearningNote
       title="恋爱助手 = 建档 + 策略 + 反馈"
       :points="['先写清自己的画像与城市', '每个对象单独建档，按阶段给建议', '执行后回填反应，AI 再调整']"
-      next="D-04 已接通：执行记录 + 复盘；下一步时间线"
+      next="D-09 已接通：右栏按「今日 / 找地点 / 复盘 / 时间线」分栏"
     />
 
     <div class="page-head">
@@ -537,7 +554,7 @@ onMounted(load)
         </div>
       </aside>
 
-      <section class="detail">
+      <section ref="detailEl" class="detail">
         <div v-if="!selected" class="empty card">
           <el-icon :size="26"><Star /></el-icon>
           <h3>选一个对象开始</h3>
@@ -589,7 +606,22 @@ onMounted(load)
             </p>
           </div>
 
-          <div class="ask card">
+          <div class="detail-tabs" role="tablist" aria-label="恋爱助手功能">
+            <button
+              v-for="t in detailTabs"
+              :key="t.name"
+              role="tab"
+              type="button"
+              :aria-selected="activeTab === t.name"
+              :class="{ on: activeTab === t.name }"
+              @click="switchTab(t.name)"
+            >
+              {{ t.label }}
+              <span v-if="t.count" class="tab-count">{{ t.count }}</span>
+            </button>
+          </div>
+
+          <div v-show="activeTab === 'places'" class="ask card">
             <div class="card-top">
               <strong><el-icon><ChatDotRound /></el-icon> 问问助手</strong>
               <span class="ask-hint">按城市与区域找地方</span>
@@ -654,7 +686,7 @@ onMounted(load)
             <p v-if="lastArea" class="ask-foot">本次按「{{ lastArea }}」周边 3km 找的地方</p>
           </div>
 
-          <div class="advice card">
+          <div v-show="activeTab === 'today'" class="advice card">
             <div class="card-top">
               <strong>AI 下一步</strong>
               <div class="advice-actions">
@@ -773,7 +805,7 @@ onMounted(load)
             </template>
           </div>
 
-          <div class="actions card">
+          <div v-show="activeTab === 'review'" class="actions card">
             <div class="card-top">
               <strong>执行与反馈</strong>
               <div class="advice-actions">
@@ -869,7 +901,7 @@ onMounted(load)
             </div>
           </div>
 
-          <div class="timeline card">
+          <div v-show="activeTab === 'timeline'" class="timeline card">
             <div class="card-top">
               <strong>时间线</strong>
               <span class="ask-hint">{{ timeline.length ? `${timeline.length} 条记录` : '从建档开始' }}</span>
@@ -1243,6 +1275,57 @@ onMounted(load)
   gap: 12px;
   min-width: 0;
   overflow-y: auto;
+}
+
+.detail-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 4px;
+  border: 1px solid var(--xy-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+}
+
+.detail-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #6a6e80;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.detail-tabs button:hover {
+  background: #f6f4ff;
+}
+
+.detail-tabs button.on {
+  background: var(--xy-violet-soft);
+  color: var(--xy-violet);
+  font-weight: 700;
+}
+
+.tab-count {
+  min-width: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(124, 92, 255, 0.14);
+  color: var(--xy-violet);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 15px;
 }
 
 .empty {
