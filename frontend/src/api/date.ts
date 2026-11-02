@@ -243,3 +243,15 @@ export interface DateTimelineEvent {
 export function getDateTimeline(targetId: number) {
   return request<DateTimelineEvent[]>(`/date/timeline?targetId=${targetId}`)
 }
+
+export interface GeoLocation {
+  city: string
+  district: string
+  address: string
+  location: string
+}
+
+/** D-08：浏览器经纬度 → 城市 / 区县；高德失败时 city 为空 */
+export function locateCity(lng: number, lat: number) {
+  return request<GeoLocation>(`/date/geo/locate?lng=${lng}&lat=${lat}`)
+}

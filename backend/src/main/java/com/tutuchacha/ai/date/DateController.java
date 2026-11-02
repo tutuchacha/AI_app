@@ -15,6 +15,7 @@ import com.tutuchacha.ai.date.dto.DateReviewView;
 import com.tutuchacha.ai.date.dto.DateTargetRequest;
 import com.tutuchacha.ai.date.dto.DateTargetView;
 import com.tutuchacha.ai.date.dto.DateTimelineEvent;
+import com.tutuchacha.ai.date.dto.GeoLocation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -44,16 +45,18 @@ public class DateController {
     private final DateActionService actionService;
     private final DateReviewService reviewService;
     private final DateTimelineService timelineService;
+    private final DateGeoService geoService;
 
     public DateController(DateService dateService, DateAdviceService adviceService, DateAskService askService,
                           DateActionService actionService, DateReviewService reviewService,
-                          DateTimelineService timelineService) {
+                          DateTimelineService timelineService, DateGeoService geoService) {
         this.dateService = dateService;
         this.adviceService = adviceService;
         this.askService = askService;
         this.actionService = actionService;
         this.reviewService = reviewService;
         this.timelineService = timelineService;
+        this.geoService = geoService;
     }
 
     @Operation(summary = "我的画像", description = "未建档返回 data=null",
@@ -167,5 +170,12 @@ public class DateController {
     @GetMapping("/timeline")
     public Result<List<DateTimelineEvent>> timeline(@RequestParam Long targetId, Authentication authentication) {
         return Result.ok(timelineService.timeline(authentication.getName(), targetId));
+    }
+
+    @Operation(summary = "定位回填城市", description = "浏览器经纬度 → 城市 / 区县 / 地址；高德失败返回空结果，不阻断手选",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/geo/locate")
+    public Result<GeoLocation> locate(@RequestParam double lng, @RequestParam double lat) {
+        return Result.ok(geoService.locate(lng, lat));
     }
 }

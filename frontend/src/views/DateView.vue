@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim, Calendar, ChatDotRound, CopyDocument, Delete, Edit, Location, MagicStick, Plus, Position, Refresh, Star } from '@element-plus/icons-vue'
 import LearningNote from '@/components/LearningNote.vue'
-import { CITY_OPTIONS } from '@/constants/cities'
+import CityPicker from '@/components/CityPicker.vue'
 import {
   askDateAssistant,
   createDateAction,
@@ -905,17 +905,7 @@ onMounted(load)
           <el-input-number v-model="profileForm.age" :min="18" :max="99" controls-position="right" />
         </el-form-item>
         <el-form-item label="城市">
-          <el-select
-            v-model="profileForm.city"
-            class="city-select"
-            filterable
-            allow-create
-            default-first-option
-            clearable
-            placeholder="选择城市，或直接输入"
-          >
-            <el-option v-for="c in CITY_OPTIONS" :key="c" :label="c" :value="c" />
-          </el-select>
+          <CityPicker v-model="profileForm.city" />
         </el-form-item>
         <el-form-item label="职业">
           <el-input v-model="profileForm.occupation" maxlength="60" />
@@ -979,17 +969,7 @@ onMounted(load)
           <el-input-number v-model="targetForm.age" :min="18" :max="99" controls-position="right" />
         </el-form-item>
         <el-form-item label="城市">
-          <el-select
-            v-model="targetForm.city"
-            class="city-select"
-            filterable
-            allow-create
-            default-first-option
-            clearable
-            placeholder="选择城市，或直接输入"
-          >
-            <el-option v-for="c in CITY_OPTIONS" :key="c" :label="c" :value="c" />
-          </el-select>
+          <CityPicker v-model="targetForm.city" />
         </el-form-item>
         <el-form-item label="最近联系">
           <el-date-picker
@@ -1951,10 +1931,6 @@ onMounted(load)
   color: #6a6e80;
   font-size: 10.5px;
   line-height: 1.6;
-}
-
-.city-select {
-  width: 100%;
 }
 
 .advice-empty {

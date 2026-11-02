@@ -3,6 +3,7 @@ package com.tutuchacha.ai.date;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tutuchacha.ai.date.dto.DateSpot;
+import com.tutuchacha.ai.date.dto.GeoLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -14,6 +15,7 @@ import org.springframework.web.util.UriBuilder;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
 
 /**
@@ -117,6 +119,56 @@ public class AmapClient {
             log.warn("amap geocode error: city={} address={} msg={}", city, address, ex.getMessage());
             return "";
         }
+    }
+
+    /**
+     * 逆地理：浏览器定位坐标 → 城市 / 区县 / 地址。
+     * 直辖市高德的 city 为空，用 province 兜底；失败返回空结果，由前端提示手选。
+     */
+    public GeoLocation regeo(double lng, double lat) {
+        if (!StringUtils.hasText(key)) {
+            return GeoLocation.empty();
+        }
+        String location = String.format(Locale.ROOT, "%.6f,%.6f", lng, lat);
+        try {
+            String raw = restClient.get()
+                    .uri(builder -> builder.path("/v3/geocode/regeo")
+                            .queryParam("key", key)
+                            .queryParam("location", location)
+                            .queryParam("extensions", "base")
+                            .build())
+                    .retrieve()
+                    .body(String.class);
+            JsonNode body = raw == null ? null : objectMapper.readTree(raw);
+            if (body == null || !"1".equals(body.path("status").asText())) {
+                log.warn("amap regeo failed: location={} info={}", location,
+                        body == null ? "empty" : body.path("info").asText());
+                return GeoLocation.empty();
+            }
+            JsonNode regeocode = body.path("regeocode");
+            JsonNode component = regeocode.path("addressComponent");
+            String province = component.path("province").asText("");
+            String city = component.path("city").asText("");
+            String district = component.path("district").asText("");
+            String address = regeocode.path("formatted_address").asText("");
+            return new GeoLocation(
+                    normalizeCity(StringUtils.hasText(city) ? city : province),
+                    district,
+                    address,
+                    location);
+        } catch (Exception ex) {
+            log.warn("amap regeo error: location={} msg={}", location, ex.getMessage());
+            return GeoLocation.empty();
+        }
+    }
+
+    /** 高德返回「杭州市」，与前端城市选项（杭州）统一去掉「市」后缀。 */
+    private String normalizeCity(String city) {
+        String value = city == null ? "" : city.trim();
+        if (value.length() > 2 && value.endsWith("市")) {
+            return value.substring(0, value.length() - 1);
+        }
+        return value;
     }
 
     /** 区县级以下精度不够，改用区域名搜 POI 取第一个中心。 */
